@@ -1,0 +1,23 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+.env
+
+# Alembic cache
+alembic/__pycache__/
+alembic/versions/__pycache__/
+
+# App cache
+app/__pycache__/
+app/routers/__pycache__/
+
+# Optional: Python version and lock files
+.python-version
+uv.lock
