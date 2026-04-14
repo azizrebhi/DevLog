@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.routers import auth ,session
+from app.routers import auth ,session , summary
 from contextlib import asynccontextmanager
 
 @asynccontextmanager
@@ -15,7 +15,7 @@ app = FastAPI(lifespan=lifespan)
 # Include your auth router
 app.include_router(auth.router)
 app.include_router(session.router)
-
+app.include_router(summary.router)
 
 @app.get("/")
 async def root():

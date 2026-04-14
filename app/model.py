@@ -31,6 +31,18 @@ class Session(Base):
     onupdate=lambda: datetime.now(timezone.utc),
     nullable=True
         )  
+class WeeklySummary(Base):
+    __tablename__ = "weekly_summaries"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    week_start = Column(DateTime(timezone=True), nullable=False)
+    total_sessions = Column(String(255), nullable=False)
+    total_minutes = Column(String(255), nullable=False)
+    top_project = Column(String(255), nullable=True)
+    most_common_blocker = Column(String(255), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
 
 
 

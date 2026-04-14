@@ -25,6 +25,7 @@ class SessionResponse(BaseModel):
     date : datetime
     updated_at: datetime | None
 class SessionCreate(BaseModel):
+    project:str
     worked_on : str   
     duration : str
     what_learned : str 
@@ -33,3 +34,13 @@ class SessionsPage(BaseModel):
     items: list[SessionResponse]
     next_cursor: UUID | None
     has_more: bool
+class SummaryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id : UUID
+    user_id: UUID
+    week_start : datetime
+    total_sessions : str
+    total_minutes : str 
+    top_project : str | None
+    most_common_blocker : str | None
+    created_at: datetime
