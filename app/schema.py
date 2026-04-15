@@ -39,8 +39,8 @@ class SummaryResponse(BaseModel):
     id : UUID
     user_id: UUID
     week_start : datetime
-    total_sessions : str
-    total_minutes : str 
+    total_sessions : int
+    total_minutes : int 
     top_project : str | None
     most_common_blocker : str | None
     created_at: datetime

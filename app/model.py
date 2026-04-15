@@ -33,16 +33,22 @@ class Session(Base):
         )  
 class WeeklySummary(Base):
     __tablename__ = "weekly_summaries"
-    
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
-    week_start = Column(DateTime(timezone=True), nullable=False)
-    total_sessions = Column(String(255), nullable=False)
-    total_minutes = Column(String(255), nullable=False)
-    top_project = Column(String(255), nullable=True)
-    most_common_blocker = Column(String(255), nullable=True)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
-
-
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    )
+    week_start: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    total_sessions: Mapped[int] = mapped_column(nullable=False)
+    total_minutes: Mapped[int] = mapped_column(nullable=False)
+    top_project: Mapped[str] = mapped_column(String(255), nullable=True)
+    most_common_blocker: Mapped[str] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc)
+    )
 
