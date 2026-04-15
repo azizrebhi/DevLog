@@ -1,0 +1,109 @@
+version: '3.8'
+
+# Define all services (containers) for your application
+services:
+  
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16
+    container_name: devlog_postgres
+    environment:
+      POSTGRES_USER: devlog
+      POSTGRES_PASSWORD: devlog123
+      POSTGRES_DB: devlog
+    ports:
+      - "5432:5432"
+    volumes:
+      # Persist database data on host machine
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U devlog"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis (message broker + cache)
+  redis:
+    image: redis:7-alpine
+    container_name: devlog_redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # FastAPI Application
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: devlog_api
+    command: uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    environment:
+      # Database connection string
+      DATABASE_URL: postgresql+asyncpg://devlog:devlog123@postgres:5432/devlog
+      postgres_url: postgresql+asyncpg://devlog:devlog123@postgres:5432/devlog
+      # Redis connection
+      REDIS_URL: redis://redis:6379/0
+      # JWT secret (change in production!)
+      SECRET_KEY: your-secret-key-change-in-production
+    volumes:
+      # Mount code for hot reloading during development
+      - .:/app
+      # Exclude .venv to prevent Windows/Linux conflict
+      - /app/.venv
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Celery Worker (processes background tasks)
+  celery_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: devlog_celery_worker
+    command: uv run celery -A app.celery worker --pool=solo --loglevel=info
+    environment:
+      DATABASE_URL: postgresql+asyncpg://devlog:devlog123@postgres:5432/devlog
+      postgres_url: postgresql+asyncpg://devlog:devlog123@postgres:5432/devlog
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: your-secret-key-change-in-production
+    volumes:
+      - .:/app
+      - /app/.venv
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Celery Beat (schedules periodic tasks)
+  celery_beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: devlog_celery_beat
+    command: uv run celery -A app.celery_app beat --loglevel=info
+    environment:
+      DATABASE_URL: postgresql+asyncpg://devlog:devlog123@postgres:5432/devlog
+      postgres_url: postgresql+asyncpg://devlog:devlog123@postgres:5432/devlog
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: your-secret-key-change-in-production
+    volumes:
+      - .:/app
+      - /app/.venv
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+# Named volumes for persistent data
+volumes:
+  postgres_data:

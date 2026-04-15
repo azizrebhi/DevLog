@@ -1,0 +1,33 @@
+# Virtual environment
+.venv/
+venv/
+__pycache__/
+
+# Git
+.git/
+.gitignore
+
+# Environment files (will be passed via docker-compose)
+.env
+
+# Development files
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+
+# Alembic bytecode
+alembic/__pycache__/
+alembic/versions/__pycache__/
+
+# Celery beat schedule (generated at runtime)
+celerybeat-schedule*
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
