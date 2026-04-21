@@ -89,7 +89,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: devlog_celery_beat
-    command: uv run celery -A app.celery_app beat --loglevel=info
+    command: uv run celery -A app.celery beat --loglevel=info
     environment:
       DATABASE_URL: postgresql+asyncpg://devlog:devlog123@postgres:5432/devlog
       postgres_url: postgresql+asyncpg://devlog:devlog123@postgres:5432/devlog

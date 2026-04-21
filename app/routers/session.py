@@ -110,13 +110,15 @@ async def update_session(
     session: AsyncSession = Depends(get_async_session)
 ):
     result = await session.execute(
-        select(Session).where(Session.id == session_id),
-        Session.user_id==current_user_id
+        select(Session).where(
+            Session.id == session_id,
+            Session.user_id == current_user_id
+        )
     )
     dev_session = result.scalar_one_or_none()
     if dev_session is None:
         raise HTTPException(status_code=404, detail="Session not found")
-
+    dev_session.project=data.project
     dev_session.worked_on = data.worked_on
     dev_session.duration = data.duration
     dev_session.what_learned = data.what_learned

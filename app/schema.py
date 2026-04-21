@@ -18,6 +18,7 @@ class SessionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id : UUID
     user_id: UUID
+    project:str
     worked_on :str   
     duration : str
     what_learned : str 
