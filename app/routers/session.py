@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException ,Query
 from uuid import UUID
-from app.schema import SessionCreate ,SessionResponse , SessionsPage
+from app.schema import SessionCreate ,SessionResponse , SessionsPage, SessionUpdate
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select ,desc ,cast, Integer
 from app.db import get_async_session
@@ -129,3 +129,36 @@ async def update_session(
     await session.commit()
     await session.refresh(dev_session)
     return dev_session
+@router.patch("/{session_id}",response_model=SessionResponse)
+async def patch_session(
+    session_id: UUID,
+    data: SessionUpdate,
+    current_user_id: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session)
+):
+    result = await session.execute(
+        select(Session).where(
+            Session.id == session_id,
+            Session.user_id == current_user_id
+        )
+    )
+    dev_session = result.scalar_one_or_none()
+    if dev_session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if data.project is not None:
+        dev_session.project = data.project
+    if data.worked_on is not None:
+        dev_session.worked_on = data.worked_on
+    if data.blockers is not None:
+        dev_session.blockers = data.blockers
+    if data.what_learned is not None:
+        dev_session.what_learned = data.what_learned
+    if data.duration is not None:
+        dev_session.duration = data.duration
+    dev_session.updated_at = datetime.now(timezone.utc)
+    await session.commit()
+    await session.refresh(dev_session)
+    return dev_session
+    
+
+

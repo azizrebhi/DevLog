@@ -31,6 +31,11 @@ class Session(Base):
     onupdate=lambda: datetime.now(timezone.utc),
     nullable=True
         )  
+    status: Mapped[str] = mapped_column(
+    String(50), 
+    nullable=False, 
+    default="active"
+     )
 class WeeklySummary(Base):
     __tablename__ = "weekly_summaries"
 

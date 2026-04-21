@@ -31,6 +31,12 @@ class SessionCreate(BaseModel):
     duration : str
     what_learned : str 
     blockers : str
+class SessionUpdate(BaseModel):
+    project: str | None = None
+    worked_on: str | None = None
+    duration: str | None = None
+    what_learned: str | None = None
+    blockers: str | None = None
 class SessionsPage(BaseModel):
     items: list[SessionResponse]
     next_cursor: UUID | None
@@ -45,3 +51,4 @@ class SummaryResponse(BaseModel):
     top_project : str | None
     most_common_blocker : str | None
     created_at: datetime
+
