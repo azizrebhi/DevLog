@@ -7,7 +7,7 @@ from app.db import get_async_session
 from app.model import Session
 from datetime import datetime, timezone
 from app.utils import get_current_user
-from typing import Optional
+from typing import Optional , List
 router=APIRouter(prefix="/sessions",tags=["sessions"])
 @router.post("/", response_model=SessionResponse)
 async def create_session(
@@ -27,6 +27,18 @@ async def create_session(
     await session.commit()
     await session.refresh(new_session)
     return new_session
+
+
+@router.get("/drafts", response_model=List[SessionResponse])
+async def get_draft_sessions(
+    current_user_id: str = Depends(get_current_user),
+    session: AsyncSession = Depends(get_async_session)
+):
+    query = select(Session).where(Session.user_id == current_user_id,
+                                   Session.status == "DRAFT")
+    result = await session.execute(query)
+    sessions = result.scalars().all()
+    return sessions
 
 
 @router.get("/{session_id}", response_model=SessionResponse)
@@ -129,7 +141,7 @@ async def update_session(
     await session.commit()
     await session.refresh(dev_session)
     return dev_session
-@router.patch("/{session_id}",response_model=SessionResponse)
+@router.patch("/{session_id}",response_model=List[SessionResponse])
 async def patch_session(
     session_id: UUID,
     data: SessionUpdate,
@@ -159,6 +171,7 @@ async def patch_session(
     await session.commit()
     await session.refresh(dev_session)
     return dev_session
-    
+
+
 
 

@@ -31,6 +31,7 @@ class SessionCreate(BaseModel):
     duration : str
     what_learned : str 
     blockers : str
+    status: str
 class SessionUpdate(BaseModel):
     project: str | None = None
     worked_on: str | None = None

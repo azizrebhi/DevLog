@@ -4,8 +4,6 @@ from contextlib import asynccontextmanager
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # We remove create_db_and_tables() because Alembic 
-    # handles the schema updates now.
     print("Starting up...")
     yield
     print("Shutting down...")
