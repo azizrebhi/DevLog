@@ -60,6 +60,7 @@ async def github_webhook(
         duration=str(len(commits) * 15),  # Estimate: 15 min per commit
         what_learned=what_learned,
         blockers="",
+        status="Draft"
     )
     session.add(new_session)
     await session.commit()
