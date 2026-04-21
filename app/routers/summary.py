@@ -33,7 +33,7 @@ async def get_summaries(
     if summary is None :
         raise HTTPException(
             status_code=404,
-            detail="No summary available"
+            detail="No summaries available"
         )
     return summary
 
