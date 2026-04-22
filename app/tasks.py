@@ -36,7 +36,7 @@ def generate_weekly_summaries():
                 )
             ).scalars().all()
             summary_data = calculate_summary(sessions_7d)
-            new_summary = WeeklySummary(
+            new_summary = WeeklySummary( 
                 user_id=user.id,
                 week_start=week_start,
                 total_sessions=summary_data["total_sessions"],
@@ -44,6 +44,6 @@ def generate_weekly_summaries():
                 top_project=summary_data["top_project"],
                 most_common_blocker=summary_data["most_common_blocker"],
             )
-            session.add(new_summary)
-        session.commit()
-        return True
+            session.add(new_summary)  
+        session.commit()   
+        return True  

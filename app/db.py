@@ -11,9 +11,6 @@ from dotenv import load_dotenv
 load_dotenv()
 postgres_url = os.getenv("postgres_url")
 
-
-
-
 engine =create_async_engine(postgres_url, echo=True)
 
 async_session_maker=async_sessionmaker(engine,expire_on_commit=False)
