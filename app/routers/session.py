@@ -8,6 +8,7 @@ from app.model import Session
 from datetime import datetime, timezone
 from app.utils import get_current_user
 from typing import Optional , List
+
 router=APIRouter(prefix="/sessions",tags=["sessions"])
 @router.post("/", response_model=SessionResponse)
 async def create_session(
