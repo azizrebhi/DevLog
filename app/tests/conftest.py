@@ -9,11 +9,10 @@ import os
 TEST_DATABASE_URL = os.getenv(
     "TEST_DATABASE_URL",
     "postgresql+asyncpg://devlog:devlog123@localhost:5432/devlog_test"
-
 )
 from app.model import User,Session,WeeklySummary
 # runs ONCE for the whole test suite using the scope = "session"
-@pytest_asyncio.fixture(scope="session")
+@pytest_asyncio.fixture(scope="function")
 async def engine():
     engine = create_async_engine(TEST_DATABASE_URL, echo=False)
     
@@ -67,12 +66,12 @@ async def client(db_session):
 
 # runs before EVERY test automatically — wipes all data
 @pytest_asyncio.fixture(autouse=True)
-async def clean_tables(engine):
+async def clean_tables(db_session):
     yield  # test runs here
     # after the test, delete all rows from all tables
-    async with engine.begin() as conn:
-        for table in reversed(Base.metadata.sorted_tables):
-            await conn.execute(table.delete())
+    for table in reversed(Base.metadata.sorted_tables):
+        await db_session.execute(table.delete())
+    await db_session.commit()
 
 
 # a client that's already logged in — for tests that need auth
