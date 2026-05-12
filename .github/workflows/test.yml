@@ -14,9 +14,8 @@ jobs:
       postgres:
         image: postgres:16
         env:
-          POSTGRES_USER: devlog
-          POSTGRES_PASSWORD: devlog123
-          POSTGRES_DB: devlog_test
+         TEST_DATABASE_URL=postgresql+asyncpg://devlog:devlog123@localhost:5432/devlog_test
+
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
