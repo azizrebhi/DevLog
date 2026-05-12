@@ -1,18 +1,20 @@
 # DevLog 📝
 
-A personal developer productivity API for tracking your daily coding sessions, analyzing patterns, and getting automated weekly summaries.
+![Tests](https://github.com/azizrebhi/DevLog/actions/workflows/test.yml/badge.svg)
+
+A production-ready developer productivity API for tracking daily coding sessions, analyzing patterns, and getting automated weekly summaries.
 
 ## What is DevLog?
 
 DevLog helps developers track their daily work by logging coding sessions with details about what they worked on, how long it took, what they learned, and what blocked them. The system automatically generates weekly summaries showing your most productive projects and common blockers.
 
-This is a real backend system demonstrating production-ready FastAPI development with authentication, background jobs, scheduled tasks, and proper database design.
+This is a real backend system demonstrating production-ready FastAPI development with authentication, background jobs, scheduled tasks, proper database design, and CI/CD with automated testing.
 
 ---
 
 ## Features
 
-### ✅ Implemented (Phase 1-4)
+### ✅ Implemented (Phase 1-5)
 
 - **Session Management** (Full CRUD)
   - Create, read, update (PUT & PATCH), and delete coding sessions
@@ -39,6 +41,13 @@ This is a real backend system demonstrating production-ready FastAPI development
   - Extracts repo name, commit messages, and files changed
   - Estimates session duration (15 min per commit)
 
+- **Testing & CI/CD**
+  - 76% test coverage with pytest
+  - 19 automated tests (6 auth, 10 sessions, 3 summary logic)
+  - GitHub Actions pipeline running on every push
+  - PostgreSQL + Redis integration testing in CI
+  - Automated test runs in ~45 seconds
+
 - **Docker & Infrastructure**
   - Full Docker Compose setup (5 services)
   - Async Alembic migrations (run inside Docker)
@@ -51,12 +60,11 @@ This is a real backend system demonstrating production-ready FastAPI development
 
 ### 🚧 Coming Soon
 
-- Redis caching for weekly summaries (Phase 5)
-- Request logging and rate limiting (Phase 6)
-- Full-text search (Phase 7)
-- Semantic search with pgvector (Phase 8)
-- MCP server integration (Phase 9)
-- CI/CD and production deployment (Phase 10)
+- Redis caching for weekly summaries (Phase 6)
+- Request logging and rate limiting (Phase 7)
+- Full-text search (Phase 8)
+- Semantic search with pgvector (Phase 9)
+- MCP server integration (Phase 10)
 
 ---
 
@@ -73,6 +81,49 @@ This is a real backend system demonstrating production-ready FastAPI development
 | **Validation** | Pydantic v2 |
 | **Container** | Docker & Docker Compose |
 | **Package Manager** | uv (ultra-fast Python package manager) |
+| **Testing** | pytest + pytest-asyncio + pytest-cov |
+| **CI/CD** | GitHub Actions |
+
+---
+
+## Testing
+
+DevLog has a comprehensive test suite covering authentication, session management, and summary generation logic.
+
+### Test Coverage
+
+- **Overall Coverage:** 76%
+- **Total Tests:** 19 (all passing)
+  - Authentication tests: 6
+  - Session management tests: 10
+  - Summary logic tests: 3
+
+### Running Tests Locally
+
+```bash
+# Install dependencies
+uv sync
+
+# Run all tests with coverage
+uv run pytest --cov=app --cov-report=term-missing
+
+# Run specific test file
+uv run pytest app/tests/test_auth.py -v
+
+# Run tests in verbose mode
+uv run pytest -v
+```
+
+### CI/CD Pipeline
+
+The project uses GitHub Actions for automated testing on every push to `main` or `develop` branches:
+
+- **Environment:** Python 3.12, PostgreSQL 16, Redis 7
+- **Services:** Automated PostgreSQL and Redis setup
+- **Speed:** Complete test run in ~45 seconds
+- **Coverage:** Tracks and reports test coverage
+
+View the workflow at [`.github/workflows/test.yml`](.github/workflows/test.yml)
 
 ---
 
@@ -145,6 +196,13 @@ docker-compose ps
 ```
 
 You should see 5 services as "Up".
+
+Run the test suite to verify everything works:
+```bash
+docker-compose exec api uv run pytest --cov=app
+```
+
+You should see 19 tests pass with 76% coverage.
 
 View logs:
 ```bash
@@ -384,18 +442,25 @@ docker-compose down -v
 
 ## Project Roadmap
 
-### Current State: Phase 4+ Complete ✅
+### Current State: Phase 5 Complete ✅
 
-DevLog supports full session CRUD (including PUT/PATCH), draft sessions, user authentication, filtering/pagination, automated weekly summaries via Celery Beat, and GitHub webhook integration for auto-tracking push activity. Fully Dockerized with async Alembic migrations.
+DevLog supports full session CRUD (including PUT/PATCH), draft sessions, user authentication, filtering/pagination, automated weekly summaries via Celery Beat, and GitHub webhook integration for auto-tracking push activity. Fully Dockerized with async Alembic migrations. **Now includes comprehensive test suite (76% coverage) and CI/CD pipeline with GitHub Actions.**
+
+### Completed Phases
+
+1. **Phase 1-2:** Core session CRUD + User authentication (JWT)
+2. **Phase 3:** Filtering, pagination, and draft sessions
+3. **Phase 4:** Automated weekly summaries (Celery Beat) + GitHub webhooks
+4. **Phase 5:** Comprehensive testing + CI/CD pipeline (GitHub Actions)
 
 ### Next Steps
 
-1. **Phase 5: Caching** — Redis cache for weekly summaries with TTL
-2. **Phase 6: Observability** — Request tracing, logging middleware, rate limiting
-3. **Phase 7: Search** — PostgreSQL full-text search across sessions
-4. **Phase 8: AI Layer** — Semantic search with pgvector and LLM summarization
-5. **Phase 9: MCP Integration** — Expose as MCP server for Claude/Copilot
-6. **Phase 10: Production** — CI/CD, testing, deployment to Railway/Fly.io
+1. **Phase 6: Caching** — Redis cache for weekly summaries with TTL
+2. **Phase 7: Observability** — Request tracing, structured logging, rate limiting
+3. **Phase 8: Search** — PostgreSQL full-text search across sessions
+4. **Phase 9: AI Layer** — Semantic search with pgvector and LLM summarization
+5. **Phase 10: MCP Integration** — Expose as MCP server for Claude/Copilot
+6. **Phase 11: Production Deployment** — Deploy to Railway/Fly.io with production configs
 
 ---
 
