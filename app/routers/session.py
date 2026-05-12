@@ -23,6 +23,7 @@ async def create_session(
         duration=data.duration,
         what_learned=data.what_learned,
         blockers=data.blockers,
+        status=data.status
     )
     session.add(new_session)
     await session.commit()
@@ -142,7 +143,7 @@ async def update_session(
     await session.commit()
     await session.refresh(dev_session)
     return dev_session
-@router.patch("/{session_id}",response_model=List[SessionResponse])
+@router.patch("/{session_id}",response_model=SessionResponse)
 async def patch_session(
     session_id: UUID,
     data: SessionUpdate,
