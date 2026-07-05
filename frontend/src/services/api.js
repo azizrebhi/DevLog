@@ -1,48 +1,79 @@
 const API_URL = 'http://localhost:8000';
 
-// Helper to get token
 const getToken = () => localStorage.getItem('token');
 
-// Login
-export async function login(username, password) {
-  const formData = new URLSearchParams();
-  formData.append('username', username);
-  formData.append('password', password);
-  
-  const response = await fetch(`${API_URL}/auth/login`, {
+export async function register(email, password) {
+  const res = await fetch(`${API_URL}/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.detail || 'Registration failed');
+  }
+  return res.json();
+}
+
+export async function login(email, password) {
+  const form = new URLSearchParams();
+  form.append('username', email);
+  form.append('password', password);
+  const res = await fetch(`${API_URL}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: formData
+    body: form,
   });
-  
-  if (!response.ok) throw new Error('Bad credentials');
-  
-  const data = await response.json();
+  if (!res.ok) throw new Error('Invalid credentials');
+  const data = await res.json();
   localStorage.setItem('token', data.access_token);
   return data;
 }
 
-// Get sessions
-export async function getSessions() {
-  const response = await fetch(`${API_URL}/sessions/`, {
-    headers: { 'Authorization': `Bearer ${getToken()}` }
-  });
-  
-  if (!response.ok) throw new Error('Failed to fetch sessions');
-  return response.json();
+export function logout() {
+  localStorage.removeItem('token');
 }
 
-// Create session
-export async function createSession(sessionData) {
-  const response = await fetch(`${API_URL}/sessions/`, {
+export async function getSessions(params = {}) {
+  const query = new URLSearchParams();
+  if (params.project) query.set('project', params.project);
+  if (params.limit)   query.set('limit', params.limit);
+  if (params.cursor)  query.set('cursor', params.cursor);
+  const res = await fetch(`${API_URL}/sessions/?${query}`, {
+    headers: { Authorization: `Bearer ${getToken()}` },
+  });
+  if (res.status === 401) { logout(); window.location.href = '/login'; }
+  if (!res.ok) throw new Error('Failed to fetch sessions');
+  return res.json();
+}
+
+export async function createSession(data) {
+  const res = await fetch(`${API_URL}/sessions/`, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${getToken()}`,
-      'Content-Type': 'application/json'
+      Authorization: `Bearer ${getToken()}`,
+      'Content-Type': 'application/json',
     },
-    body: JSON.stringify(sessionData)
+    body: JSON.stringify(data),
   });
-  
-  if (!response.ok) throw new Error('Failed to create session');
-  return response.json();
+  if (!res.ok) throw new Error('Failed to create session');
+  return res.json();
+}
+
+export async function deleteSession(id) {
+  const res = await fetch(`${API_URL}/sessions/${id}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${getToken()}` },
+  });
+  if (!res.ok) throw new Error('Failed to delete session');
+  return res.ok;
+}
+
+export async function getLatestSummary() {
+  const res = await fetch(`${API_URL}/summary/latest`, {
+    headers: { Authorization: `Bearer ${getToken()}` },
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error('Failed to fetch summary');
+  return res.json();
 }
