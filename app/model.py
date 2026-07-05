@@ -1,19 +1,19 @@
-from sqlalchemy import Enum as SAEnum,Column , String,Text ,DateTime , ForeignKey,UniqueConstraint
+from sqlalchemy import Enum as SAEnum,Column,Integer ,Float,Text, String ,DateTime , ForeignKey,UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, relationship,Mapped,mapped_column
 from sqlalchemy.dialects.postgresql import UUID
 from datetime import datetime, timezone
 import uuid
 from enum import StrEnum
-from typing import List
+#from typing import List
 class WorkspaceRole(StrEnum):
     OWNER = "owner"
     EDITOR = "editor"
     VIEWER = "viewer"
-class MessageeRole(StrEnum):
+class MessageRole(StrEnum):
     USER = "user"
-    ASISSTANT = "assistant"
+    ASSISTANT = "assistant"
     SYSTEM = "system"
-class JOBSTATUS(StrEnum):
+class DOCUMENTSTATUS(StrEnum):
     READY = "ready"
     PENDING = "pending"
     FAILED = "failed"
@@ -23,10 +23,16 @@ class Base(DeclarativeBase):
     pass
 class User(Base):
     __tablename__ = "users"
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    email = Column(String(255), unique=True, nullable=False,index=True)
-    password_hash=Column(String(255), nullable=False)
-    created_at = Column(DateTime(timezone=True),default=lambda: datetime.now(timezone.utc))
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+     )
+    email: Mapped[str] = mapped_column(String, unique=True, nullable=False, index=True)
+    password_hash: Mapped[str] = mapped_column(String, nullable=False)
+    created_at :Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False
+    )
 class Workspace(Base):
     __tablename__ = "workspace"
     id: Mapped[uuid.UUID] = mapped_column(
@@ -35,11 +41,22 @@ class Workspace(Base):
     owner_id:Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
     )
-    name=Column(String(255), unique=True, nullable=False,index=True)
-    description=Column(String(255), unique=True, nullable=False,index=True)
-    created_at = Column(DateTime(timezone=True),default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime(timezone=True),default=lambda: datetime.now(timezone.utc))
-class Workspace_Member(Base) : 
+    name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    description:Mapped[str]=mapped_column(Text,nullable=False,index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+    DateTime(timezone=True),
+    default=lambda: datetime.now(timezone.utc),
+    onupdate=lambda: datetime.now(timezone.utc),
+    nullable=False)
+    __table_args__ = (
+        UniqueConstraint("name", "owner_id", name="uq_workspace"),
+    )
+class WorkspaceMember(Base) : 
     __tablename__ = "workspace_member"
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -73,30 +90,31 @@ class Message(Base):
     id:Mapped[uuid.UUID]=mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
      )
-    workspace_id=Mapped[uuid.UUID] = mapped_column(
+    workspace_id:Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("workspace.id"), nullable=False
     )
-    role:Mapped[MessageeRole] = mapped_column(
+    role:Mapped[MessageRole] = mapped_column(
         SAEnum(
-            MessageeRole,
+            MessageRole,
             name="message_role_enum",
             native_enum=True,        # PostgreSQL enum type
             validate_strings=True
         ),
         nullable=False, 
     )
+    content: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
-        nullable=False
-    )
+        nullable=False)
 
 
-class documents(Base):
+class Document(Base):
      __tablename__="documents"
      id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
      )
+     title: Mapped[str] = mapped_column(String, nullable=False)
      user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
     )
@@ -104,21 +122,27 @@ class documents(Base):
         UUID(as_uuid=True), ForeignKey("workspace.id"), nullable=False
     )
      source_type:Mapped[str] = mapped_column(String(255), nullable=False)
-     status:Mapped[JOBSTATUS] = mapped_column(
-        SAEnum(
-            JOBSTATUS,
-            name="job_status_enum",
-            native_enum=True,        # PostgreSQL enum type
-            validate_strings=True
-        ),
-        nullable=False, 
-    )
+     status: Mapped[DOCUMENTSTATUS] = mapped_column(
+    SAEnum(
+        DOCUMENTSTATUS,
+        name="document_status_enum",
+        native_enum=True,  # PostgreSQL enum type
+        validate_strings=True,
+    ),
+    default=DOCUMENTSTATUS.PENDING,  # Sets the default value
+    nullable=False,)
      file_path : Mapped[str] = mapped_column(String(255), nullable=False)
-     created_at: Mapped[datetime] = mapped_column(
+     created_at:Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc)
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False
     )
-class document_chunks(Base):
+     updated_at: Mapped[datetime] = mapped_column(
+    DateTime(timezone=True),
+    default=lambda: datetime.now(timezone.utc),
+    onupdate=lambda: datetime.now(timezone.utc),
+    nullable=False)
+class DocumentChunk(Base):
     __tablename__="document_chunk"
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -126,7 +150,14 @@ class document_chunks(Base):
     document_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("documents.id"), nullable=False
     )
-    
+    chunk_index:Mapped[int] = mapped_column( nullable=False)
+    content:Mapped[Text] = mapped_column(Text, nullable=False)
+    token_count:Mapped[int] = mapped_column( Integer ,nullable=True)
+    page_start:Mapped[int] = mapped_column(Integer, nullable=True)
+    page_end:Mapped[int] = mapped_column(Integer, nullable=True)
+    __table_args__ = (
+        UniqueConstraint("document_id", "chunk_index", name="uq_document_chunk"),
+    )
 class MessageSource(Base):
     __tablename__ = "message_source"
     id:Mapped[uuid.UUID]=mapped_column(
@@ -138,7 +169,14 @@ class MessageSource(Base):
     chunk_id:Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("document_chunk.id"), nullable=False
     )
+    score:Mapped[float] =mapped_column(Float,nullable=False )
     citation_text: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at :Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False
+    )
+    __table_args__=(UniqueConstraint("message_id","chunk_id",name="uq_message_chunk"))
 
 
 
