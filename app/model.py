@@ -176,7 +176,7 @@ class MessageSource(Base):
         default=lambda: datetime.now(timezone.utc),
         nullable=False
     )
-    __table_args__=(UniqueConstraint("message_id","chunk_id",name="uq_message_chunk"))
+    __table_args__=(UniqueConstraint("message_id","chunk_id",name="uq_message_chunk"),)
 
 
 
