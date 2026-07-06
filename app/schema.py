@@ -28,6 +28,11 @@ class DocumentResponse(BaseModel):
     status:str
     created_at:datetime
     updated_at: datetime
+class DocumentStatusResponse(BaseModel):
+    document_id:UUID
+    status:str
+    updated_at: datetime
+
 
 
 

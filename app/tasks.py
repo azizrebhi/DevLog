@@ -2,11 +2,10 @@ from app.celery import celery_app
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
-from app.model import User, Session
 import os
-from datetime import datetime, timedelta, timezone
-from app.summary import calculate_summary  # Import your summary function
-
+import time 
+from app.model import Document , DOCUMENTSTATUS
+import uuid
 load_dotenv()
 postgres_url = os.getenv("postgres_url")
 
@@ -22,28 +21,35 @@ SyncSession = sessionmaker(sync_engine)
     retry_jitter=True,
     max_retries=3
 )
-def generate_weekly_summaries():
-    from app.model import WeeklySummary
+def ingest_document(document_id: str):
     with SyncSession() as session:
-        users = session.execute(select(User)).scalars().all()
-        seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
-        week_start = seven_days_ago.replace(hour=0, minute=0, second=0, microsecond=0)
-        for user in users:
-            sessions_7d = session.execute(
-                select(Session).where(
-                    Session.user_id == user.id,
-                    Session.date >= seven_days_ago
-                )
-            ).scalars().all()
-            summary_data = calculate_summary(sessions_7d)
-            new_summary = WeeklySummary( 
-                user_id=user.id,
-                week_start=week_start,
-                total_sessions=summary_data["total_sessions"],
-                total_minutes=summary_data["total_minutes"],
-                top_project=summary_data["top_project"],
-                most_common_blocker=summary_data["most_common_blocker"],
-            )
-            session.add(new_summary)  
-        session.commit()   
-        return True  
+        doc_uuid = uuid.UUID(document_id)
+
+       #Loading document
+        document = session.execute(
+            select(Document).where(Document.id == doc_uuid)
+        ).scalar_one_or_none()
+
+        if document is None:
+            # nothing to process
+            return {"status": "not_found", "document_id": document_id}
+
+        try:
+            # 2) pending -> processing
+            document.status = DOCUMENTSTATUS.PROCESSING
+            session.commit()
+
+            # 3) temporary fake processing time
+            time.sleep(5)
+
+            # 4) processing -> ready
+            document.status = DOCUMENTSTATUS.READY
+            session.commit()
+
+            return {"status": "ready", "document_id": document_id}
+
+        except Exception:
+            # 5) if anything fails -> failed
+            document.status = DOCUMENTSTATUS.FAILED
+            session.commit()
+            raise

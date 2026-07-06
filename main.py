@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import auth ,workspace 
+from app.routers import auth ,workspace ,documents
 from contextlib import asynccontextmanager
 from app.logging_config import configure_logging  
 from app.middleware import RequestIDMiddleware     
@@ -26,6 +26,9 @@ app.add_middleware(RequestIDMiddleware)
 # Include your auth router
 app.include_router(auth.router)
 app.include_router(workspace.router)
+app.include_router(documents.router)
+
+
 
 
 @app.get("/")

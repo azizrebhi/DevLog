@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import get_async_session
 from app.utils import get_current_user
 from app.model import Workspace,Document , DOCUMENTSTATUS
+from app.tasks import ingest_document
 from typing import Annotated
 
 router = APIRouter(prefix="/workspaces", tags=["workspaces"])
@@ -73,11 +74,12 @@ async def upload_Documents(
 
     for doc in created_docs:
         await session.refresh(doc)
+        ingest_document.delay(str(doc.id))
 
     return created_docs
 
     
-    
+
 
 
 
