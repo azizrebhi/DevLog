@@ -20,4 +20,4 @@ app/routers/__pycache__/
 
 # Optional: Python version and lock files
 .python-version
-uv.lock
+uv.lock"uploads/" 

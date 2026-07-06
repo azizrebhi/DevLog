@@ -42,7 +42,7 @@ class Workspace(Base):
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
-    description:Mapped[str]=mapped_column(Text,nullable=False,index=True)
+    summary:Mapped[str]=mapped_column(Text,nullable=True,index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -53,9 +53,6 @@ class Workspace(Base):
     default=lambda: datetime.now(timezone.utc),
     onupdate=lambda: datetime.now(timezone.utc),
     nullable=False)
-    __table_args__ = (
-        UniqueConstraint("name", "owner_id", name="uq_workspace"),
-    )
 class WorkspaceMember(Base) : 
     __tablename__ = "workspace_member"
     id: Mapped[uuid.UUID] = mapped_column(
