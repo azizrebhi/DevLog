@@ -24,8 +24,7 @@ async def upload_Documents(
     workspace_id:UUID,
     files: list[UploadFile]=File(...),
     session: AsyncSession = Depends(get_async_session),
-    current_user_id: str = Depends(get_current_user),
-    
+    current_user_id: str = Depends(get_current_user), 
 ):
     result = await session.execute(
         select(Workspace).where(

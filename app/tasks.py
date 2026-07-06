@@ -2,9 +2,12 @@ from app.celery import celery_app
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
+from docling.document_converter import DocumentConverter
+from docling.chunking import HybridChunker
 import os
 import time 
-from app.model import Document , DOCUMENTSTATUS
+from app.model import Document , DOCUMENTSTATUS , DocumentChunk
+
 import uuid
 load_dotenv()
 postgres_url = os.getenv("postgres_url")
@@ -38,18 +41,29 @@ def ingest_document(document_id: str):
             # 2) pending -> processing
             document.status = DOCUMENTSTATUS.PROCESSING
             session.commit()
-
-            # 3) temporary fake processing time
-            time.sleep(5)
-
+            
+            #docling parsing 
+            converter = DocumentConverter()
+            doc = converter.convert(document.file_path).document
             # 4) processing -> ready
+            document.parsed_markdown=doc.export_to_markdown()
+            session.commit()
+            chunker = HybridChunker()  # add params later when refining
+            chunks = chunker.chunk(doc)
+            list_chunks=[]
+            for idx , ch in enumerate(chunks) : 
+                text=getattr(ch, "text", None) or str(ch)
+                list_chunks.append(DocumentChunk(document_id=doc_uuid,chunk_index=idx,content=text, token_count=None,page_start=None,page_end=None,))           
+            session.add_all(list_chunks) 
             document.status = DOCUMENTSTATUS.READY
             session.commit()
-
             return {"status": "ready", "document_id": document_id}
 
         except Exception:
-            # 5) if anything fails -> failed
-            document.status = DOCUMENTSTATUS.FAILED
-            session.commit()
+            session.rollback()
+            document = session.execute(select(Document).where(Document.id == doc_uuid)).scalar_one_or_none()
+            if document:
+               document.status = DOCUMENTSTATUS.FAILED
+               session.commit()
+            
             raise
