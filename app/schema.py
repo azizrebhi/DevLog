@@ -32,7 +32,18 @@ class DocumentStatusResponse(BaseModel):
     document_id:UUID
     status:str
     updated_at: datetime
+class RetrieveRequest(BaseModel):
+    query: str = Field(min_length=2)
+    limit: int = Field(default=5, ge=1, le=20)
 
+class RetrievedChunk(BaseModel):
+    document_id: UUID
+    chunk_index: int
+    content: str
+
+class RetrieveResponse(BaseModel):
+    query: str
+    results: list[RetrievedChunk]
 
 
 

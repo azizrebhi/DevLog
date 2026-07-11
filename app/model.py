@@ -1,6 +1,7 @@
 from sqlalchemy import Enum as SAEnum,Column,Integer ,Float,Text, String ,DateTime , ForeignKey,UniqueConstraint
-from sqlalchemy.orm import DeclarativeBase, relationship,Mapped,mapped_column
+from sqlalchemy.orm import DeclarativeBase, relationship,Mapped,mapped_column 
 from sqlalchemy.dialects.postgresql import UUID
+from pgvector.sqlalchemy import Vector
 from datetime import datetime, timezone
 import uuid
 from enum import StrEnum
@@ -153,6 +154,7 @@ class DocumentChunk(Base):
     token_count:Mapped[int] = mapped_column( Integer ,nullable=True)
     page_start:Mapped[int] = mapped_column(Integer, nullable=True)
     page_end:Mapped[int] = mapped_column(Integer, nullable=True)
+    embedding:Mapped[list[float] | None]=mapped_column(Vector(384), nullable=True)
     __table_args__ = (
         UniqueConstraint("document_id", "chunk_index", name="uq_document_chunk"),
     )
