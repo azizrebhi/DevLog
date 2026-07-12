@@ -3,17 +3,19 @@ from datetime import datetime, timedelta
 from jose import jwt, JWTError
 from fastapi import HTTPException, Depends
 from fastapi.security import OAuth2PasswordBearer
-import os 
+import os
 import html
 from dotenv import load_dotenv
+
 
 load_dotenv()
 SECRET_KEY=os.getenv("SECRET_KEY")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
-
 pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
+
+
 
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
@@ -46,4 +48,3 @@ def escape_xml(text: str) -> str:
 def safe_cdata(text: str) -> str:
     # Prevent breaking out of CDATA blocks
     return text.replace("]]>", "]]]]><![CDATA[>")
-
