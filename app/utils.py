@@ -4,6 +4,7 @@ from jose import jwt, JWTError
 from fastapi import HTTPException, Depends
 from fastapi.security import OAuth2PasswordBearer
 import os 
+import html
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -39,4 +40,10 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         return id
     except JWTError:
         raise HTTPException(status_code=401, detail="Could not validate credentials")
+def escape_xml(text: str) -> str:
+    return html.escape(text, quote=True)
+
+def safe_cdata(text: str) -> str:
+    # Prevent breaking out of CDATA blocks
+    return text.replace("]]>", "]]]]><![CDATA[>")
 

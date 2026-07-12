@@ -44,6 +44,12 @@ class RetrievedChunk(BaseModel):
 class RetrieveResponse(BaseModel):
     query: str
     results: list[RetrievedChunk]
+class AnswerResponse(BaseModel):
+    query: str
+    answer: str
+    citations:list[RetrievedChunk]
+
+
 
 
 
