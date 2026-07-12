@@ -1,17 +1,22 @@
 from fastapi import APIRouter, Depends 
 from uuid import UUID
 from dotenv import load_dotenv
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.utils import get_current_user , escape_xml,safe_cdata 
 from app.services.retrieval_service import hybrid_retrieve_chunks
+from app.services.rerank_service import rerank_chunks
 from app.schema import RetrieveRequest , AnswerResponse
 from app.db import get_async_session
 from openai import AsyncOpenAI
+import logging
 import os
+import time
 
 load_dotenv()
 open_ai_key=os.getenv("OPEN_AI_KEY")
 client = AsyncOpenAI(api_key=open_ai_key)
+logger = logging.getLogger("uvicorn.error")
 router=APIRouter(prefix="/workspaces",tags=["retirieval"])
 
 @router.post("/{workspace_id}/answer", response_model=AnswerResponse)
@@ -31,9 +36,25 @@ async def answer_generation(
         return AnswerResponse(
             query=payload.query,
             answer="I could not find relevant context in this workspace to answer confidently.",
+            citations=[]
         )
+    before_order = [
+        (str(chunk.document_id), chunk.chunk_index)
+        for chunk in retrieved.results
+    ]
+    logger.warning("Rerank candidates before: %s", before_order)
+    start = time.perf_counter()
+    reranked = await run_in_threadpool(rerank_chunks, payload.query, retrieved.results, payload.limit)
+    elapsed_ms = (time.perf_counter() - start) * 1000
+    after_order = [
+        (str(chunk.document_id), chunk.chunk_index)
+        for chunk in reranked
+    ]
+    logger.warning("Rerank results after: %s", after_order)
+    logger.warning("Rerank took %.2f ms for %d candidates", elapsed_ms, len(retrieved.results))
+    
     source_blocks: list[str] = []
-    for i, chunk in enumerate(retrieved.results, start=1):
+    for i, chunk in enumerate(reranked, start=1):
         source_blocks.append(
             f"<source_chunk id='S{i}' doc_id='{escape_xml(str(chunk.document_id))}' "
             f"chunk_index='{chunk.chunk_index}'>\n"
@@ -73,5 +94,5 @@ async def answer_generation(
     if not answer:
         answer = "I could not generate an answer from the retrieved context."
 
-    return AnswerResponse(query=payload.query, answer=answer,citations=retrieved.results)
+    return AnswerResponse(query=payload.query, answer=answer,citations=reranked)
    

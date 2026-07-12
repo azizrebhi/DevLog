@@ -5,6 +5,8 @@ from sqlalchemy import select , func
 from fastapi import HTTPException
 from uuid import UUID
 from openai import AsyncOpenAI
+import logging
+import time
 import os
 
 
@@ -114,5 +116,6 @@ async def hybrid_retrieve_chunks(
     )
     for item in top
               ]
+    
     return RetrieveResponse(query=payload.query, results=results)
 
