@@ -1,0 +1,2 @@
+=== RAGAS Results ===
+{'answer_relevancy': 0.6966, 'faithfulness': 0.7818, 'context_precision': 0.5178, 'context_recall': 0.8000}

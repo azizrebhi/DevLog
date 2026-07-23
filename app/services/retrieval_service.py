@@ -107,7 +107,7 @@ async def hybrid_retrieve_chunks(
             "score": 0.0,
         }
       fused[key]["score"] += 1.0 / (RRF_K + rank)
-    top = sorted(fused.values(), key=lambda x: x["score"], reverse=True)[: payload.limit]
+    top = sorted(fused.values(), key=lambda x: x["score"], reverse=True)[:20]
     results = [
     RetrievedChunk(
         document_id=item["document_id"],
@@ -118,4 +118,6 @@ async def hybrid_retrieve_chunks(
               ]
     
     return RetrieveResponse(query=payload.query, results=results)
+
+
 

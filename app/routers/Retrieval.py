@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.utils import get_current_user , escape_xml,safe_cdata 
 from app.services.retrieval_service import hybrid_retrieve_chunks
 from app.services.rerank_service import rerank_chunks
-from app.schema import RetrieveRequest , AnswerResponse
+from app.schema import RetrieveRequest , AnswerResponse ,AnswerCitation
 from app.db import get_async_session
 from openai import AsyncOpenAI
 import logging
@@ -54,19 +54,28 @@ async def answer_generation(
     logger.warning("Rerank took %.2f ms for %d candidates", elapsed_ms, len(retrieved.results))
     
     source_blocks: list[str] = []
+    citation_list:list[AnswerCitation]=[]
     for i, chunk in enumerate(reranked, start=1):
+        citation=AnswerCitation(
+            source_id=f"S{i}",
+            document_id=chunk.document_id,
+            chunk_index=chunk.chunk_index,
+            content=chunk.content
+        )
+        citation_list.append(citation)
         source_blocks.append(
             f"<source_chunk id='S{i}' doc_id='{escape_xml(str(chunk.document_id))}' "
             f"chunk_index='{chunk.chunk_index}'>\n"
             f"<![CDATA[{safe_cdata(chunk.content)}]]>\n"
             f"</source_chunk>"
         )
+    
 
     context_xml = "<sources>\n" + "\n".join(source_blocks) + "\n</sources>"
     # Generate answer grounded in retrieved context only
     completion = await client.chat.completions.create(
         model="gpt-4o-mini",
-        temperature=0.2,
+        temperature=0.0,
         messages=[
             {
                 "role": "system",
@@ -94,5 +103,8 @@ async def answer_generation(
     if not answer:
         answer = "I could not generate an answer from the retrieved context."
 
-    return AnswerResponse(query=payload.query, answer=answer,citations=reranked)
+    return AnswerResponse(query=payload.query, answer=answer,citations=citation_list)
+   
+
+
    

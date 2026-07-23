@@ -7,7 +7,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import get_async_session
 from app.utils import get_current_user
 from app.model import Workspace,Document , DOCUMENTSTATUS
-from app.tasks import ingest_document
 from typing import Annotated
 
 router = APIRouter(prefix="/workspaces", tags=["workspaces"])
@@ -48,7 +47,7 @@ async def upload_Documents(
             raise HTTPException(status_code=400, detail="Invalid file name")
 
         ext = Path(file.filename).suffix.lower()
-        if ext not in {".pdf", ".docx", ".txt", ".md"}:
+        if ext not in {".pdf", ".docx", ".txt", ".md",".pptx"}:
             raise HTTPException(status_code=400, detail=f"Unsupported file type: {ext}")
 
         stored_name = f"{uuid4()}{ext}"
@@ -70,6 +69,7 @@ async def upload_Documents(
         created_docs.append(doc)
 
     await session.commit()
+    from app.tasks import ingest_document
 
     for doc in created_docs:
         await session.refresh(doc)
