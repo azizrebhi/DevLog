@@ -69,10 +69,12 @@
     ]
   },
   {
-    "query": "Does the proposal include plans for a native mobile application for iOS or Android?",
-    "reference": "The proposal does not mention a native mobile application; the scope is limited to a Python MCP server and a terminal-based CLI.",
-    "contexts": []
-  },
+  "query": "Does the proposal include plans for a native mobile application for iOS or Android?",
+  "reference": "The proposal does not mention a native mobile application; the scope is limited to a Python MCP server and a terminal-based CLI.",
+  "contexts": [
+    "BLT-MCP & BLT-CLI — AI Agent Interface + Developer CLI for the BLT Ecosystem... making BLT accessible from every interface: web, AI, and command line."
+  ]
+},
   {
     "query": "What GPU hardware is required to run the BLT-MCP server according to the technical specifications?",
     "reference": "The proposal does not specify any GPU requirements; it lists an Intel Core i7 CPU and 16 GB of RAM for the development environment.",

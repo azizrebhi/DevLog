@@ -1,0 +1,790 @@
+<!-- frontend\src\app\features\notebook\notebook-view\notebook-view.component.html -->
+<div class="notebook-container">
+
+  <div class="notebook-content">
+
+    <!-- Resize Overlay -->
+    <div class="resize-overlay" [class.active]="isResizing"></div>
+
+    <!-- Mobile panel backdrop -->
+    <div class="mobile-panel-backdrop"
+         *ngIf="leftPanelMobileActive || rightPanelMobileActive"
+         (click)="closeMobilePanel()"></div>
+
+    <!-- Left Sidebar - Sources (like NotebookLM) -->
+    <aside class="sidebar-left" 
+           [class.panel-collapsed]="leftPanelWidth <= 5" 
+           [class.mobile-panel-active]="leftPanelMobileActive"
+           [style.flex-basis.%]="leftPanelWidth">
+      <div class="sidebar-header">
+        <h2 *ngIf="leftPanelWidth > 5">Sources</h2>
+        <button class="sidebar-collapse-btn"
+                (click)="leftPanelWidth = leftPanelWidth > 5 ? 2 : 22"
+                [title]="leftPanelWidth > 5 ? 'Collapse' : 'Expand'">
+          <mat-icon>{{ leftPanelWidth > 5 ? 'chevron_left' : 'chevron_right' }}</mat-icon>
+        </button>
+      </div>
+      
+      <!-- Source Viewer for Citations -->
+      <div class="source-viewer" *ngIf="sourceViewerState.visible && leftPanelWidth > 5">
+        <div class="source-viewer-header">
+          <button mat-icon-button (click)="backToSourcesList()" class="back-btn">
+            <mat-icon>arrow_back</mat-icon>
+          </button>
+          <div class="source-title">
+            <h3>{{ sourceViewerState.documentName }}</h3>
+          </div>
+        </div>
+        
+        <div class="source-content-wrapper" *ngIf="!isLoadingSource">
+          <div class="markdown-content" 
+               [innerHTML]="getSanitizedHtml(sourceViewerState.renderedHtml)">
+          </div>
+        </div>
+        
+        <div class="source-loading" *ngIf="isLoadingSource">
+          <div class="source-spinner"></div>
+          <p>Loading source...</p>
+        </div>
+      </div>
+
+      <!-- Sources List -->
+      <div class="sources-list-container" *ngIf="!sourceViewerState.visible && leftPanelWidth > 5">
+        <div class="sidebar-pane-actions">
+          <button class="add-source-btn" (click)="openUploadDialog()">
+            <mat-icon>add</mat-icon>
+            <span>Add sources</span>
+          </button>
+        </div>
+
+        <!-- Select All Row -->
+        <div class="select-all-row" *ngIf="filteredDocuments.length > 0">
+          <span class="select-all-label">Select all sources</span>
+          <mat-checkbox
+            [checked]="selectedDocuments.size === filteredDocuments.length && filteredDocuments.length > 0"
+            [indeterminate]="selectedDocuments.size > 0 && selectedDocuments.size < filteredDocuments.length"
+            (change)="toggleSelectAll()"
+            color="primary">
+          </mat-checkbox>
+        </div>
+
+        <div class="document-list-wrapper">
+          <div class="document-list" *ngIf="filteredDocuments.length > 0">
+            <div *ngFor="let doc of filteredDocuments; trackBy: trackByDocId"
+                 class="document-item"
+                 [class.selected]="selectedDocuments.has(doc.id)"
+                 [class.highlighted]="isDocumentHighlighted(doc.id)">
+              <div class="doc-icon-wrapper">
+                <mat-icon class="doc-type-icon" 
+                          [class.spinning]="doc.status === 'PROCESSING'">
+                  {{ doc.status === 'PROCESSING' ? 'sync' : getDocIcon(doc.fileName) }}
+                </mat-icon>
+              </div>
+              <div class="document-info" (click)="viewDocumentMarkdown(doc.id)" style="cursor: pointer;">
+                <span class="doc-name">{{ cleanFileName(doc.fileName) }}</span>
+              </div>
+              <mat-checkbox
+                [checked]="selectedDocuments.has(doc.id)"
+                (change)="toggleDocumentSelection(doc.id)"
+                color="primary"
+                class="doc-checkbox">
+              </mat-checkbox>
+            </div>
+          </div>
+
+          <div class="empty-state" *ngIf="filteredDocuments.length === 0 && currentNotebookId !== null">
+            <mat-icon class="empty-icon">description</mat-icon>
+            <p class="empty-text">No sources yet</p>
+            <p class="empty-hint">Click "Add sources" to upload documents</p>
+          </div>
+
+          <div class="empty-state" *ngIf="currentNotebookId === null">
+            <mat-icon class="empty-icon">upload_file</mat-icon>
+            <p class="empty-text">Add sources to get started</p>
+            <p class="empty-hint">Upload documents to create a notebook</p>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Resize Handle Left -->
+    <div class="resize-handle" 
+         (mousedown)="startResize($event, 'left')"></div>
+
+    <!-- Center - Chat -->
+    <main class="chat-area" [style.flex-basis.%]="centerPanelWidth">
+      <div class="chat-header">
+        <div style="display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0;">
+          <h2 style="margin:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+            {{ notebookName }}
+          </h2>
+        </div>
+        <div style="position: relative; flex-shrink: 0; margin-left: auto;">
+          <button class="nv-menu-btn" (click)="toggleNotebookMenu($event)"
+                  [class.nv-menu-btn--open]="notebookMenuOpen">
+            <mat-icon>more_vert</mat-icon>
+          </button>
+          <div class="nv-menu" *ngIf="notebookMenuOpen" (click)="$event.stopPropagation()">
+            <button (click)="openPersonalizeModal()">
+              <mat-icon>edit</mat-icon>
+              Personalise Notebook
+            </button>
+            <button (click)="openShareModal()">
+              <mat-icon>share</mat-icon>
+              Share Notebook
+            </button>
+            <div class="nv-menu-divider"></div>
+            <button class="danger" (click)="deleteHistory()">
+              <mat-icon>delete</mat-icon>
+              Delete History
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Empty State -->
+      <div class="chat-empty" *ngIf="messages.length === 0">
+        <div class="empty-content">
+          <h2 class="empty-title">{{ notebookName }}</h2>
+          <p class="empty-meta" *ngIf="filteredDocuments.length > 0">
+            {{ filteredDocuments.length }} source{{ filteredDocuments.length !== 1 ? 's' : '' }}
+          </p>
+
+          <!-- Auto-generated Summary (Source Guide) -->
+          <div class="source-guide" *ngIf="notebookSummary">
+            <div class="source-guide-header">
+              <mat-icon>menu_book</mat-icon>
+              <span>Source Guide</span>
+            </div>
+            <p class="source-guide-summary">{{ notebookSummary }}</p>
+          </div>
+
+          <!-- Generating summary shimmer overlay -->
+          <div class="source-guide-skeleton" *ngIf="isGeneratingSummary && !notebookSummary">
+            <div class="skeleton-line skeleton-line--long"></div>
+            <div class="skeleton-line skeleton-line--full"></div>
+            <div class="skeleton-line skeleton-line--full"></div>
+            <div class="skeleton-line skeleton-line--medium"></div>
+            <div class="skeleton-line skeleton-line--short"></div>
+          </div>
+
+          <!-- Suggested Questions -->
+          <div class="suggested-questions" *ngIf="suggestedQuestions.length > 0">
+            <div class="question-chips">
+              <button class="question-chip" *ngFor="let q of suggestedQuestions.slice(0, 3)"
+                      (click)="askSuggestedQuestion(q)">
+                {{ q }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Fallback when no summary yet -->
+          <ng-container *ngIf="!notebookSummary && !isGeneratingSummary">
+            <p class="empty-subtitle" *ngIf="activeSelectedDocumentsCount > 0">
+              {{ activeSelectedDocumentsCount }} source{{ activeSelectedDocumentsCount !== 1 ? 's' : '' }} ready. Ask me anything about your documents.
+            </p>
+            <p class="empty-subtitle" *ngIf="activeSelectedDocumentsCount === 0 && selectedDocuments.size > 0">
+              Processing documents... This may take a few moments.
+            </p>
+            <p class="empty-subtitle" *ngIf="selectedDocuments.size === 0 && filteredDocuments.length > 0">
+              Select sources from the left panel, then ask a question.
+            </p>
+            <p class="empty-subtitle" *ngIf="filteredDocuments.length === 0">
+              Add sources from the left panel to get started.
+            </p>
+          </ng-container>
+        </div>
+      </div>
+
+      <!-- Messages -->
+      <div class="messages-container" *ngIf="messages.length > 0">
+        <div class="messages-scroll">
+          <div class="messages-list">
+            <!-- Pinned Source Guide at top of conversation (same style as empty state) -->
+            <ng-container *ngIf="notebookSummary">
+              <h2 class="empty-title">{{ notebookName }}</h2>
+              <p class="empty-meta" *ngIf="filteredDocuments.length > 0">
+                {{ filteredDocuments.length }} source{{ filteredDocuments.length !== 1 ? 's' : '' }}
+              </p>
+              <div class="source-guide source-guide--pinned">
+                <p class="source-guide-summary">{{ notebookSummary }}</p>
+              </div>
+            </ng-container>
+
+            <ng-container *ngFor="let message of messages; let i = index; trackBy: trackByMessageId">
+              
+              <!-- Assistant Message -->
+              <div class="message assistant-message" *ngIf="message.role === 'assistant' && message.content">
+                <div class="message-body">
+                  <!-- During streaming: render markdown (throttled) without citation processing -->
+                  <div class="message-text" *ngIf="isLoading && i === messages.length - 1"
+                     [innerHTML]="formatStreamingContent(message.content)"></div>
+                  <!-- After streaming: show formatted with clickable citations -->
+                  <p class="message-text" *ngIf="!(isLoading && i === messages.length - 1)"
+                     [innerHTML]="formatMessageWithCitations(message)"></p>
+                  <div class="message-actions" *ngIf="!(isLoading && i === messages.length - 1)">
+                    <button mat-stroked-button (click)="saveToNote(message.content)">
+                      <mat-icon>bookmark_add</mat-icon>
+                      <span>Save to Note</span>
+                    </button>
+                    <button mat-button (click)="copyMessage(message.content)">
+                      <mat-icon>content_copy</mat-icon>
+                      <span>Copy</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- User Message -->
+              <div class="message user-message"
+                   *ngIf="message.role === 'user'">
+                <p class="user-text">{{ message.content }}</p>
+              </div>
+
+            </ng-container>
+
+            <!-- Loading Indicator — Agentic Reasoning Steps -->
+            <div class="message assistant-message loading-message" *ngIf="isLoading && !streamingContent">
+              <div class="message-body">
+                <div class="reasoning-steps" *ngIf="streamingSteps.length > 0">
+                  <div class="reasoning-step active">
+                    <span class="step-text">{{ streamingSteps[streamingSteps.length - 1] }}</span>
+                  </div>
+                </div>
+                <div class="loading-dots" *ngIf="streamingSteps.length === 0">
+                  <span class="dot"></span>
+                  <span class="dot"></span>
+                  <span class="dot"></span>
+                </div>
+              </div>
+            </div>
+
+            <div #messagesEnd></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Input Area -->
+      <div class="chat-input-container">
+        <div class="pill-input-wrapper">
+          <input type="text"
+                 name="chatInput"
+                 id="chatInput"
+                 [(ngModel)]="inputMessage"
+                 (keydown)="onEnterKey($event)"
+                 [disabled]="isLoading || activeSelectedDocumentsCount === 0"
+                 placeholder="Ask a question about your sources..."
+                 autocomplete="off"
+                 tabindex="0"
+                 spellcheck="true">
+          <button mat-icon-button
+                  class="send-btn"
+                  (click)="sendMessage()"
+                  [disabled]="!inputMessage.trim() || activeSelectedDocumentsCount === 0 || isLoading">
+            <mat-icon>send</mat-icon>
+          </button>
+        </div>
+        <p class="disclaimer">AI may generate inaccurate info. Verify important facts.</p>
+      </div>
+    </main>
+
+    <!-- Resize Handle Right -->
+    <div class="resize-handle" 
+         (mousedown)="startResize($event, 'right')"></div>
+
+    <!-- Right Sidebar - Studio (like NotebookLM) -->
+    <aside class="sidebar-right" 
+           [class.panel-collapsed]="rightPanelWidth <= 5" 
+           [class.mobile-panel-active]="rightPanelMobileActive"
+           [style.flex-basis.%]="rightPanelWidth">
+      <div class="sidebar-header">
+        <h2 *ngIf="rightPanelWidth > 5">Studio</h2>
+        <button class="sidebar-collapse-btn"
+                (click)="rightPanelWidth = rightPanelWidth > 5 ? 2 : 30"
+                [title]="rightPanelWidth > 5 ? 'Collapse' : 'Expand'">
+          <mat-icon>{{ rightPanelWidth > 5 ? 'chevron_right' : 'chevron_left' }}</mat-icon>
+        </button>
+      </div>
+
+      <!-- Studio Tool Grid (always visible) -->
+      <div class="studio-grid" *ngIf="rightPanelWidth > 5">
+        <button class="studio-card studio-card--flashcards" 
+                (click)="generateFlashcards()" 
+                [disabled]="activeSelectedDocumentsCount === 0">
+          <mat-icon>style</mat-icon>
+          <span class="studio-card-label">Flashcards</span>
+          <div class="studio-card-action">
+            <mat-icon>chevron_right</mat-icon>
+          </div>
+        </button>
+        <button class="studio-card studio-card--mindmap" 
+                (click)="generateMindMap()" 
+                [disabled]="activeSelectedDocumentsCount === 0">
+          <mat-icon>account_tree</mat-icon>
+          <span class="studio-card-label">Mind Map</span>
+          <div class="studio-card-action">
+            <mat-icon>chevron_right</mat-icon>
+          </div>
+        </button>
+        <button class="studio-card studio-card--quiz" 
+                (click)="generateQuiz()" 
+                [disabled]="activeSelectedDocumentsCount === 0">
+          <mat-icon>quiz</mat-icon>
+          <span class="studio-card-label">Quiz</span>
+          <div class="studio-card-action">
+            <mat-icon>chevron_right</mat-icon>
+          </div>
+        </button>
+        <button class="studio-card studio-card--summary" 
+                (click)="generateDocSummary()" 
+                [disabled]="activeSelectedDocumentsCount === 0">
+          <mat-icon>summarize</mat-icon>
+          <span class="studio-card-label">Summary</span>
+          <div class="studio-card-action">
+            <mat-icon>chevron_right</mat-icon>
+          </div>
+        </button>
+      </div>
+
+      <!-- Studio hint when no active sources -->
+      <p class="studio-hint" *ngIf="activeSelectedDocumentsCount === 0 && rightPanelWidth > 5">
+        {{ selectedDocuments.size === 0 ? 'Select sources to generate tools.' : 'Waiting for sources to finish processing...' }}
+      </p>
+
+      <!-- Studio Output List (generating + completed items + notes) -->
+      <div class="studio-output-list" *ngIf="rightPanelWidth > 5">
+        <!-- Generating items (beige cards) -->
+        <div *ngFor="let item of generatingItems" class="gen-card gen-card--loading" [ngClass]="'gen-card--' + item.type.toLowerCase()">
+          <mat-icon class="gen-card-icon spinning">sync</mat-icon>
+          <div class="gen-card-info">
+            <span class="gen-card-title">Generating {{ getStudioLabel(item.type) }}...</span>
+            <span class="gen-card-meta">Based on {{ item.sourceCount }} sources</span>
+          </div>
+        </div>
+
+        <!-- Completed artifacts -->
+        <div *ngFor="let artifact of studioArtifacts" 
+             class="gen-card gen-card--done"
+             [ngClass]="'gen-card--' + artifact.type.toLowerCase()"
+             (click)="openArtifact(artifact)">
+          <mat-icon class="gen-card-icon">{{ getArtifactIcon(artifact.type) }}</mat-icon>
+          <div class="gen-card-info">
+            <span class="gen-card-title">Studio {{ getStudioLabel(artifact.type) }}</span>
+            <span class="gen-card-meta">{{ selectedDocuments.size }} {{ selectedDocuments.size === 1 ? 'source' : 'sources' }} · {{ timeAgo(artifact.createdAt) }}</span>
+          </div>
+          <button class="gen-card-delete" (click)="deleteArtifact(artifact.id, $event)" title="Delete">
+            <mat-icon>close</mat-icon>
+          </button>
+        </div>
+
+        <!-- Notes -->
+        <div *ngFor="let note of notes; trackBy: trackByNoteId" 
+             class="gen-card gen-card--done gen-card--note"
+             [class.expanded]="expandedNoteId === note.id"
+             (click)="toggleNoteExpand(note.id)">
+          <mat-icon class="gen-card-icon">edit_note</mat-icon>
+          <div class="gen-card-info">
+            <span class="gen-card-title">{{ note.title || (note.content | slice:0:40) + '...' }}</span>
+            <span class="gen-card-meta">{{ timeAgo(note.createdAt) }}</span>
+            <div class="note-full-content" *ngIf="expandedNoteId === note.id">
+              {{ note.content }}
+            </div>
+          </div>
+          <button class="gen-card-delete" (click)="deleteNote(note.id, $event)" title="Delete">
+            <mat-icon>close</mat-icon>
+          </button>
+        </div>
+
+        <!-- Empty state -->
+        <div class="studio-output-empty" *ngIf="generatingItems.length === 0 && studioArtifacts.length === 0 && notes.length === 0">
+          <p>Your generated items will appear here.</p>
+        </div>
+      </div>
+
+      <!-- ══ MIND MAP MODAL placed at root level ══ -->
+
+    </aside>
+
+  </div>
+</div>
+
+<!-- ══ FLASHCARD FULLSCREEN MODAL ══ -->
+<div class="fc-overlay" *ngIf="isFlashcardModalOpen" (click)="closeFlashcardModal()">
+  <div class="fc-modal" (click)="$event.stopPropagation()">
+
+    <!-- Header -->
+    <div class="fc-header">
+      <span class="fc-title">Flashcards</span>
+      <span class="fc-counter" *ngIf="flashcards.length > 0 && flashcardMode === 'study'">
+        {{ currentFlashcardIndex + 1 }} / {{ flashcards.length }}
+      </span>
+      <div class="fc-header-actions">
+        <button mat-icon-button (click)="shuffleFlashcards()" title="Shuffle" *ngIf="flashcardMode === 'study'">
+          <mat-icon>shuffle</mat-icon>
+        </button>
+        <button mat-icon-button (click)="generateFlashcards()" [disabled]="isGeneratingFlashcards" title="Regenerate">
+          <mat-icon>refresh</mat-icon>
+        </button>
+        <button mat-icon-button (click)="closeFlashcardModal()" title="Close">
+          <mat-icon>close</mat-icon>
+        </button>
+      </div>
+    </div>
+
+    <!-- Loading -->
+    <div class="fc-loading" *ngIf="isGeneratingFlashcards">
+      <div class="loading-dots lg">
+        <span></span><span></span><span></span>
+      </div>
+      <p>Generating flashcards from your sources...</p>
+    </div>
+
+    <!-- Study Mode -->
+    <div class="fc-canvas" *ngIf="!isGeneratingFlashcards && flashcards.length > 0 && flashcardMode === 'study'">
+      <div class="fc-card" [class.flipped]="isFlashcardFlipped" (click)="flipFlashcard()">
+        <div class="fc-card-inner">
+          <div class="fc-card-front">
+            <span class="fc-label">QUESTION</span>
+            <p class="fc-text">{{ flashcards[currentFlashcardIndex]?.question }}</p>
+            <span class="fc-hint">Click to reveal answer</span>
+          </div>
+          <div class="fc-card-back">
+            <span class="fc-label">ANSWER</span>
+            <p class="fc-text">{{ flashcards[currentFlashcardIndex]?.answer }}</p>
+            <span class="fc-page" *ngIf="flashcards[currentFlashcardIndex]?.pageNumber">
+              Page {{ flashcards[currentFlashcardIndex].pageNumber }}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div class="fc-actions">
+        <button mat-icon-button (click)="prevFlashcard()" [disabled]="currentFlashcardIndex === 0">
+          <mat-icon>chevron_left</mat-icon>
+        </button>
+        <button mat-stroked-button class="fc-missed-btn" (click)="markFlashcard(false)">
+          <mat-icon>close</mat-icon> Missed
+        </button>
+        <button mat-stroked-button class="fc-got-btn" (click)="markFlashcard(true)">
+          <mat-icon>check</mat-icon> Got it
+        </button>
+        <button mat-icon-button (click)="nextFlashcard()" [disabled]="currentFlashcardIndex >= flashcards.length - 1">
+          <mat-icon>chevron_right</mat-icon>
+        </button>
+      </div>
+
+      <div class="fc-progress">
+        <div class="fc-progress-bar">
+          <div class="fc-progress-fill" [style.width.%]="((flashcardResults.got + flashcardResults.missed) / flashcards.length) * 100"></div>
+        </div>
+        <div class="fc-progress-stats">
+          <span>{{ flashcardResults.got }} correct</span>
+          <span>{{ flashcardResults.missed }} missed</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Results Mode -->
+    <div class="fc-canvas fc-results" *ngIf="!isGeneratingFlashcards && flashcardMode === 'results' && flashcards.length > 0">
+      <div class="fc-results-circle">
+        <div class="fc-results-score">
+          {{ flashcardResults.got }} / {{ flashcardResults.got + flashcardResults.missed }}
+        </div>
+        <span class="fc-results-label">Correct</span>
+      </div>
+      <div class="fc-results-breakdown">
+        <div class="fc-result-row fc-got">
+          <mat-icon>check_circle</mat-icon>
+          <span>{{ flashcardResults.got }} you got right</span>
+        </div>
+        <div class="fc-result-row fc-missed">
+          <mat-icon>cancel</mat-icon>
+          <span>{{ flashcardResults.missed }} you missed</span>
+        </div>
+      </div>
+      <div class="fc-results-actions">
+        <button mat-flat-button class="fc-retry-all-btn" (click)="restartFlashcards('all')">
+          <mat-icon>replay</mat-icon> Retry All
+        </button>
+        <button mat-stroked-button class="fc-retry-missed-btn" (click)="restartFlashcards('missed')" *ngIf="missedCards.length > 0">
+          <mat-icon>refresh</mat-icon> Retry Missed ({{ missedCards.length }})
+        </button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══ QUIZ FULLSCREEN MODAL ══ -->
+<div class="quiz-overlay" *ngIf="isQuizModalOpen" (click)="closeQuizModal()">
+  <div class="quiz-modal" (click)="$event.stopPropagation()">
+    <div class="quiz-header">
+      <span class="quiz-title">Quiz</span>
+      <span class="quiz-counter" *ngIf="quizMode === 'answering'">
+        {{ currentQuizIndex + 1 }} / {{ quizQuestions.length }}
+      </span>
+      <button class="quiz-close-btn" (click)="closeQuizModal()">
+        <mat-icon>close</mat-icon>
+      </button>
+    </div>
+
+    <!-- Answering mode -->
+    <div class="quiz-body" *ngIf="quizMode === 'answering' && quizQuestions.length > 0">
+      <p class="quiz-question">{{ quizQuestions[currentQuizIndex].question }}</p>
+      <div class="quiz-options">
+        <button *ngFor="let option of quizQuestions[currentQuizIndex].options; let i = index"
+                class="quiz-option"
+                [class.selected]="selectedAnswer === i"
+                [class.correct]="quizAnswered && i === quizQuestions[currentQuizIndex].correctIndex"
+                [class.wrong]="quizAnswered && selectedAnswer === i && i !== quizQuestions[currentQuizIndex].correctIndex"
+                (click)="selectQuizAnswer(i)"
+                [disabled]="quizAnswered">
+          <span class="option-letter">{{ ['A','B','C','D'][i] }}</span>
+          <span class="option-text">{{ option }}</span>
+        </button>
+      </div>
+      <p class="quiz-explanation" *ngIf="quizAnswered">
+        {{ quizQuestions[currentQuizIndex].explanation }}
+      </p>
+      <div class="quiz-actions" #quizActions>
+        <button class="quiz-submit-btn"
+                *ngIf="!quizAnswered"
+                [disabled]="selectedAnswer === null"
+                (click)="submitQuizAnswer()">
+          Submit
+        </button>
+        <button class="quiz-next-btn" *ngIf="quizAnswered" (click)="nextQuizQuestion()">
+          {{ currentQuizIndex < quizQuestions.length - 1 ? 'Next' : 'See Results' }}
+        </button>
+      </div>
+    </div>
+
+    <!-- Results mode -->
+    <div class="quiz-results" *ngIf="quizMode === 'results'">
+      <div class="quiz-score-circle">
+        <span class="score-number">{{ quizScore }}</span>
+        <span class="score-total">/ {{ quizQuestions.length }}</span>
+      </div>
+      <p class="quiz-score-label">Correct Answers</p>
+      <button class="quiz-retry-btn" (click)="openQuizModal()">Try Again</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SUMMARY FULLSCREEN MODAL ══ -->
+<div class="summary-overlay" *ngIf="isSummaryModalOpen" (click)="closeSummaryModal()">
+  <div class="summary-modal" (click)="$event.stopPropagation()">
+    <div class="summary-modal-header">
+      <span class="summary-modal-title">Summary</span>
+      <div class="summary-header-actions">
+        <button class="summary-download-btn" (click)="downloadSummaryAsPdf()" title="Download as HTML">
+          <mat-icon>download</mat-icon>
+          <span>Download</span>
+        </button>
+        <button class="summary-close-btn" (click)="closeSummaryModal()">
+          <mat-icon>close</mat-icon>
+        </button>
+      </div>
+    </div>
+    <div class="summary-modal-body">
+      <div class="summary-text" [innerHTML]="docSummaryText"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MIND MAP FULLSCREEN MODAL ══ -->
+<div class="mm-overlay" *ngIf="isMindmapModalOpen" (click)="closeMindmapModal()">
+  <div class="mm-modal" (click)="$event.stopPropagation()">
+
+    <!-- Header -->
+    <div class="mm-header">
+      <span class="mm-title">{{ mindmapData?.central || 'Mind Map' }}</span>
+      <div class="mm-header-actions">
+        <button mat-icon-button (click)="generateMindMap()" [disabled]="isGeneratingMindmap" title="Regenerate">
+          <mat-icon>refresh</mat-icon>
+        </button>
+        <button mat-icon-button (click)="closeMindmapModal()" title="Close">
+          <mat-icon>close</mat-icon>
+        </button>
+      </div>
+    </div>
+
+    <!-- Loading -->
+    <div class="mm-loading" *ngIf="isGeneratingMindmap">
+      <div class="loading-dots lg">
+        <span></span><span></span><span></span>
+      </div>
+      <p>Building your mind map...</p>
+    </div>
+
+    <!-- Horizontal Tree -->
+    <div class="mm-canvas" *ngIf="!isGeneratingMindmap && mindmapData">
+      <div class="mm-tree">
+
+        <!-- Central Node -->
+        <div class="mm-tree-row">
+          <div class="mm-node mm-root" (click)="toggleCentralNode()">
+            <span class="mm-node-label">{{ mindmapData.central }}</span>
+            <mat-icon class="mm-expand-icon" *ngIf="getLevel1Nodes().length > 0">
+              {{ isCentralExpanded() ? 'remove' : 'add' }}
+            </mat-icon>
+          </div>
+
+          <!-- Level 1 Branch -->
+          <div class="mm-children" *ngIf="isCentralExpanded()">
+            <div class="mm-branch" *ngFor="let l1 of getLevel1Nodes()">
+              <div class="mm-connector"></div>
+              <div class="mm-tree-row">
+                <div class="mm-node mm-l1" [class.expanded]="isNodeExpanded(l1.id)" (click)="toggleMindmapNode(l1.id)">
+                  <span class="mm-node-label">{{ l1.label }}</span>
+                  <mat-icon class="mm-expand-icon" *ngIf="getChildrenOf(l1.id).length > 0">
+                    {{ isNodeExpanded(l1.id) ? 'remove' : 'add' }}
+                  </mat-icon>
+                </div>
+
+                <!-- Level 2 Branch -->
+                <div class="mm-children" *ngIf="isNodeExpanded(l1.id)">
+                  <div class="mm-branch" *ngFor="let l2 of getChildrenOf(l1.id)">
+                    <div class="mm-connector"></div>
+                    <div class="mm-tree-row">
+                      <div class="mm-node mm-l2" [class.expanded]="isNodeExpanded(l2.id)" (click)="toggleMindmapNode(l2.id)">
+                        <span class="mm-node-label">{{ l2.label }}</span>
+                        <mat-icon class="mm-expand-icon" *ngIf="getChildrenOf(l2.id).length > 0">
+                          {{ isNodeExpanded(l2.id) ? 'remove' : 'add' }}
+                        </mat-icon>
+                      </div>
+
+                      <!-- Level 3 Branch -->
+                      <div class="mm-children" *ngIf="isNodeExpanded(l2.id)">
+                        <div class="mm-branch" *ngFor="let l3 of getChildrenOf(l2.id)">
+                          <div class="mm-connector"></div>
+                          <div class="mm-tree-row">
+                            <div class="mm-node mm-l3" [class.expanded]="isNodeExpanded(l3.id)" (click)="toggleMindmapNode(l3.id)">
+                              <span class="mm-node-label">{{ l3.label }}</span>
+                              <mat-icon class="mm-expand-icon" *ngIf="getChildrenOf(l3.id).length > 0">
+                                {{ isNodeExpanded(l3.id) ? 'remove' : 'add' }}
+                              </mat-icon>
+                            </div>
+
+                            <!-- Level 4 Branch -->
+                            <div class="mm-children" *ngIf="isNodeExpanded(l3.id)">
+                              <div class="mm-branch" *ngFor="let l4 of getChildrenOf(l3.id)">
+                                <div class="mm-connector"></div>
+                                <div class="mm-node mm-l4">
+                                  <span class="mm-node-label">{{ l4.label }}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Add Sources Modal -->
+<app-add-sources-modal
+  *ngIf="showAddSourcesModal"
+  (confirmed)="onAddSourcesConfirmed($event)"
+  (cancelled)="onAddSourcesCancelled()">
+</app-add-sources-modal>
+
+<!-- Personalise Modal -->
+<div class="nh-modal-backdrop" *ngIf="showPersonalizeModal" (click)="showPersonalizeModal = false">
+  <div class="nh-modal" (click)="$event.stopPropagation()">
+    <h3>Personalise Notebook</h3>
+    <div class="nh-modal-thumb-area" (click)="thumbFileInput.click()">
+      <img *ngIf="personalizeThumbnailUrl" [src]="personalizeThumbnailUrl"
+           alt="thumbnail" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-card);" />
+      <button *ngIf="!personalizeThumbnailUrl" class="nh-import-btn" type="button">&uarr; Import thumbnail</button>
+      <input #thumbFileInput type="file" accept="image/*" style="display:none"
+             (change)="onPersonalizeThumbnailSelected($event)" />
+    </div>
+    <label class="nh-modal-label">Notebook title</label>
+    <input class="nh-modal-input" type="text"
+           placeholder="Enter notebook name"
+           [(ngModel)]="personalizeTitle" 
+           autofocus />
+    <div class="nh-modal-actions">
+      <button class="nh-modal-cancel" (click)="showPersonalizeModal = false">Cancel</button>
+      <button class="nh-modal-ok" (click)="savePersonalizeFromModal()">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- Share Modal -->
+<div class="nh-modal-backdrop" *ngIf="showShareModal" (click)="showShareModal = false">
+  <div class="nh-modal" (click)="$event.stopPropagation()">
+    <h3>Share Notebook</h3>
+    
+    <label class="nh-modal-label">Visibility</label>
+    <select class="nh-modal-input" [(ngModel)]="shareVisibility">
+      <option value="PRIVATE">Private (only me)</option>
+      <option value="ENTERPRISE">Enterprise (all users)</option>
+      <option value="DEPARTMENT">Department (my department)</option>
+    </select>
+    
+    <label class="nh-modal-label">Share via Email (comma-separated, optional)</label>
+    <input class="nh-modal-input" type="text"
+           placeholder="user@sofrecom.com, other@sofrecom.com"
+           [(ngModel)]="shareEmails" />
+    
+    <div class="nh-modal-actions">
+      <button class="nh-modal-cancel" (click)="showShareModal = false">Cancel</button>
+      <button class="nh-modal-ok" (click)="saveShare()">Share</button>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm Modal -->
+<app-confirm-modal
+  *ngIf="showConfirmModal"
+  [title]="confirmModalTitle"
+  [message]="confirmModalMessage"
+  [destructive]="true"
+  [confirmLabel]="'Delete'"
+  [loading]="confirmModalLoading"
+  (confirmed)="onConfirmModalConfirmed()"
+  (cancelled)="closeConfirmModal()">
+</app-confirm-modal>
+
+<!-- Mobile Bottom Navigation -->
+<nav class="mobile-bottom-nav" *ngIf="isMobileView">
+  <button class="nav-item" 
+          [class.active]="activeMobilePanel === 'chat'"
+          (click)="switchMobilePanel('chat')">
+    <mat-icon>chat</mat-icon>
+    <span>Chat</span>
+  </button>
+  
+  <button class="nav-item" 
+          [class.active]="activeMobilePanel === 'sources'"
+          (click)="switchMobilePanel('sources')">
+    <mat-icon>folder</mat-icon>
+    <span>Sources</span>
+  </button>
+  
+  <button class="nav-item" 
+          [class.active]="activeMobilePanel === 'studio'"
+          (click)="switchMobilePanel('studio')">
+    <mat-icon>auto_awesome</mat-icon>
+    <span>Studio</span>
+  </button>
+  
+  <button class="nav-item" 
+          [class.active]="activeMobilePanel === 'notes'"
+          (click)="switchMobilePanel('notes')">
+    <mat-icon>edit_note</mat-icon>
+    <span>Notes</span>
+  </button>
+</nav>

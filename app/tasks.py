@@ -3,11 +3,11 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
 from docling.document_converter import DocumentConverter
-from docling.chunking import HybridChunker
 import tiktoken
 from openai import OpenAI
 import os
-from app.model import Document, DOCUMENTSTATUS, DocumentChunk
+import re
+from app.model import Document, DOCUMENTSTATUS, DocumentChunk, DocumentParentChunk
 import uuid
 
 load_dotenv()
@@ -18,6 +18,28 @@ sync_engine = create_engine(
 SyncSession = sessionmaker(sync_engine)
 open_ai_key = os.getenv("OPEN_AI_KEY")
 client = OpenAI(api_key=open_ai_key)
+
+
+def split_markdown_into_parents(markdown: str) -> list[str]:
+    """Splits full markdown document on Markdown headers (h1 to h3)."""
+    sections = re.split(r"\n(?=#{1,3}\s)", markdown)
+    return [s.strip() for s in sections if s.strip()]
+
+
+def split_parent_into_children(text: str, target_chars: int = 1200, overlap: int = 150) -> list[str]:
+    """Creates overlapping character-based child sliding window fragments."""
+    out = []
+    start = 0
+    n = len(text)
+    while start < n:
+        end = min(start + target_chars, n)
+        chunk = text[start:end].strip()
+        if chunk:
+            out.append(chunk)
+        if end == n:
+            break
+        start = max(0, end - overlap)
+    return out
 
 
 @celery_app.task(
@@ -41,63 +63,71 @@ def ingest_document(document_id: str):
             return {"status": "not_found", "document_id": document_id}
 
         try:
-            # 2) pending -> processing
+            # pending -> processing
             document.status = DOCUMENTSTATUS.PROCESSING
             session.commit()
             
-            # docling parsing 
+            # Docling parsing to export markdown string
             converter = DocumentConverter()
             doc = converter.convert(document.file_path).document
             
-            # 4) processing -> ready
+            # Save raw document parsed text to parent record
             document.parsed_markdown = doc.export_to_markdown()
             session.commit()
             
             # Initialize tiktoken tokenizer matching text-embedding-3-small (cl100k_base)
             tokenizer = tiktoken.get_encoding("cl100k_base")
             
-            # Configure HybridChunker with fixed size, tokenizer, and item merging rules
-            chunker = HybridChunker(
-                tokenizer=tokenizer,
-                max_tokens=400,
-                merge_updates=True
-            )
-            
-            chunks = chunker.chunk(doc)
-            list_chunks = []
-            
-            for idx, ch in enumerate(chunks): 
-                # Use serialize method to extract structured text safely without string duplication loops
-                text = chunker.serialize(ch).strip()
-                
-                if text != "": 
-                    # Calculate exact token count using your initialized tokenizer
-                    token_count = len(tokenizer.encode(text))
+            # Process parent structural chunks based on heading sections
+            markdown_text = document.parsed_markdown or ""
+            parents = split_markdown_into_parents(markdown_text)
+
+            parent_rows = []
+            for p_idx, p_text in enumerate(parents):
+                p_tokens = len(tokenizer.encode(p_text))
+                parent_rows.append(
+                    DocumentParentChunk(
+                        document_id=doc_uuid,
+                        parent_index=p_idx,
+                        content=p_text,
+                        token_count=p_tokens,
+                        page_start=None,
+                        page_end=None,
+                    )
+                )
+
+            session.add_all(parent_rows)
+            session.flush()  # Flushes parent_rows to DB to generate parent primary keys (.id)
+
+            child_rows = []
+            child_idx = 0
+            for p in parent_rows:
+                children = split_parent_into_children(p.content, target_chars=1200, overlap=150)
+                for child_text in children:
+                    token_count = len(tokenizer.encode(child_text))
                     
                     response = client.embeddings.create(
                         model="text-embedding-3-small",
-                        input=text,
-                        dimensions=384 
+                        input=child_text,
+                        dimensions=384
                     )
                     embedding = response.data[0].embedding
-                    
-                    # Extract page ranges cleanly from Docling chunk metadata
-                    page_start = ch.meta.doc_items[0].prov[0].page_no if ch.meta and ch.meta.doc_items and ch.meta.doc_items[0].prov else None
-                    page_end = ch.meta.doc_items[-1].prov[0].page_no if ch.meta and ch.meta.doc_items and ch.meta.doc_items[-1].prov else None
-                    
-                    list_chunks.append(
+
+                    child_rows.append(
                         DocumentChunk(
                             document_id=doc_uuid,
-                            chunk_index=idx,
-                            content=text, 
+                            parent_id=p.id, # Seamless hierarchical map link
+                            chunk_index=child_idx,
+                            content=child_text,
                             token_count=token_count,
-                            page_start=page_start,
-                            page_end=page_end,
+                            page_start=None,
+                            page_end=None,
                             embedding=embedding
                         )
                     )
-          
-            session.add_all(list_chunks) 
+                    child_idx += 1
+
+            session.add_all(child_rows)
             document.status = DOCUMENTSTATUS.READY
             session.commit()
             return {"status": "ready", "document_id": document_id}

@@ -143,35 +143,40 @@ class Document(Base):
     nullable=False)
 class DocumentParentChunk(Base):
     __tablename__ = "document_parent_chunk"
+
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     document_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("documents.id"), nullable=False
+        UUID(as_uuid=True), ForeignKey("documents.id"), nullable=False, index=True
     )
-    parent_index: Mapped[int] = mapped_column(nullable=False)
+    parent_index: Mapped[int] = mapped_column(Integer, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    token_count: Mapped[int] = mapped_column(Integer, nullable=True)
+    page_start: Mapped[int] = mapped_column(Integer, nullable=True)
+    page_end: Mapped[int] = mapped_column(Integer, nullable=True)
+
     __table_args__ = (
         UniqueConstraint("document_id", "parent_index", name="uq_document_parent_chunk"),
     )
-
 class DocumentChunk(Base):
-    __tablename__="document_chunk"
+    __tablename__ = "document_chunk"
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
      )
     document_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("documents.id"), nullable=False
     )
-    parent_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("document_parent_chunk.id"), nullable=True
+    parent_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("document_parent_chunk.id"), nullable=True, index=True
     )
-    chunk_index:Mapped[int] = mapped_column(nullable=False)
-    content:Mapped[Text] = mapped_column(Text, nullable=False)
-    token_count:Mapped[int] = mapped_column(Integer, nullable=True)
-    page_start:Mapped[int] = mapped_column(Integer, nullable=True)
-    page_end:Mapped[int] = mapped_column(Integer, nullable=True)
-    embedding:Mapped[list[float] | None]=mapped_column(Vector(384), nullable=True)
+    chunk_index: Mapped[int] = mapped_column(nullable=False)
+    content: Mapped[Text] = mapped_column(Text, nullable=False)
+    token_count: Mapped[int] = mapped_column(Integer, nullable=True)
+    page_start: Mapped[int] = mapped_column(Integer, nullable=True)
+    page_end: Mapped[int] = mapped_column(Integer, nullable=True)
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(384), nullable=True)
+
     __table_args__ = (
         UniqueConstraint("document_id", "chunk_index", name="uq_document_chunk"),
     )
