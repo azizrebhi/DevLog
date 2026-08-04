@@ -55,11 +55,14 @@ class RetrieveResponse(BaseModel):
 class AnswerCitation(BaseModel):
     source_id:str
     document_id:UUID
-    chunk_index:int
+    chunk_index:int | None = None
+    page_start:int | None = None
+    page_end:int | None = None
     content:str
 
 class AnswerResponse(BaseModel):
     query: str
+    route: str
     answer: str
     citations:list[AnswerCitation]
 
