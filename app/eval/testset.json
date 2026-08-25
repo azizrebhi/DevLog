@@ -1,92 +1,90 @@
 [
   {
-    "query": "What are the primary goals of the OWASP BLT-MCP and BLT-CLI project?",
-    "reference": "The project aims to build a unified interface giving AI agents and developers access to the BLT ecosystem through a production-ready Python MCP server and a developer-facing command-line tool (CLI).",
+    "query": "What limitation of the current Nest bot motivates the AI assistant project?",
+    "reference": "Nest bot only responds to pre-programmed commands, so it cannot answer general or project-related questions, leading to unresolved queries and repeated manual answering by members.",
     "contexts": [
-      "The goal is to build a unified MCP interface that gives AI agents and developers complete access to BLT through BLT-API.",
-      "BLT-MCP: A production-ready MCP server exposing BLT to AI agents through the Model Context Protocol.",
-      "BLT-CLI: A developer-facing command-line tool for interacting with BLT from the terminal.",
-      "Both interfaces share a common Python API client layer so code is written once and used by both MCP and CLI."
+      "Nest bot currently operates based on commands and can only respond to data tied to each command.",
+      "Users frequently ask general or project-specific questions that don't match any existing command.",
+      "When Nest bot can't answer these queries, manual guidance is needed, sometimes leaving questions unsolved or repeatedly answered."
     ]
   },
   {
-    "query": "Why is a 'no-framework' Python approach proposed for the MCP server?",
-    "reference": "The no-framework approach provides direct control over the tool lifecycle, improves token efficiency through custom serialization, and ensures security-first design features like scoped authentication are built-in from day one.",
+    "query": "What is Retrieval-Augmented Generation (RAG) and why is it used in the Nest bot project?",
+    "reference": "RAG improves LLM responses by retrieving relevant information from an external knowledge base before generating an answer, making replies more accurate and context-aware for OWASP-specific queries.",
     "contexts": [
-      "Using the SDK directly instead of something like FastMCP means we see exactly how tools, resources, and prompts get registered and invoked.",
-      "Controlling serialization means stripping fields the LLM doesn't need to keep responses compact.",
-      "Fewer tokens result in cheaper and faster agent interactions.",
-      "A no-framework approach means we control exactly what goes through the auth pipeline."
+      "RAG enhances LLM responses by pulling relevant information from an external knowledge base before generating an answer.",
+      "Without RAG the LLM only relies on what it was trained on; with RAG, retrieved context plus the query are both given to the model.",
+      "The technique is used so OWASP-specific answers stay accurate and context-aware."
     ]
   },
   {
-    "query": "How does the project handle potential context window overflow from large API responses?",
-    "reference": "Overflow is managed through paginated responses, tiered formats (summary vs. full mode), selective field inclusion requested by agents, and a token-based response size budget.",
+    "query": "How does the Nest bot proposal use Redis caching, and what does the distance_threshold control?",
+    "reference": "Redis stores previously generated RAG/LLM responses and uses semantic search to match new queries to cached ones; the distance_threshold (0.2-0.4) controls how strict or flexible that semantic match is.",
     "contexts": [
-      "Paginated responses: 10–25 items per page by default; agents request more as needed.",
-      "Tiered response formats: summary mode (id, title, status) vs full mode; default to summary.",
-      "Selective field inclusion: agents specify which fields they need (e.g., id, title, severity).",
-      "Response size budget: configurable max token estimate; truncate with has_more flag if exceeded."
+      "Redis caches the RAG plus LLM generated response so it can be reused for similar future questions.",
+      "Semantic search compares embeddings of the new query against cached query embeddings using a distance_threshold of 0.2 to 0.4.",
+      "A lower distance_threshold makes the semantic match stricter, while a higher one allows more flexible matching."
     ]
   },
   {
-    "query": "What are the five layers of the proposed security model?",
-    "reference": "The security model consists of scoped authentication (OAuth 2.0/API keys), per-tool rate limiting, input validation (sanitization), sanitized error handling to prevent leaks, and a final security audit.",
+    "query": "Describe the multi-layered approach used to route user queries to the correct Slack channel.",
+    "reference": "The first layer is a rule-based keyword match with a longest-match-first strategy; if ambiguous, a second layer uses TF-IDF features with a trained classifier to predict the channel, falling back to RAG below a confidence threshold.",
     "contexts": [
-      "Layer 2: Authentication — Read-only via API key; writes require OAuth 2.0 with specific scopes.",
-      "Layer 3: Input Validation — Sanitize all resource URIs and tool parameters to reject path traversal and SQL injection.",
-      "Layer 4: Rate Limiting — Configurable per-tool limits, such as 10 req/min for write actions.",
-      "Layer 5: Error Handling — MCP-compliant error codes return only sanitized information to clients.",
-      "Final audit: Injection testing, auth bypass attempts, and resource enumeration checks in Week 12."
+      "The rule-based layer defines keywords, abbreviations, and synonyms to identify which channel to route to.",
+      "A Longest Match First strategy favors the most specific matching keyword when multiple keywords match.",
+      "If ambiguity remains, a second layer combining TF-IDF and a trained classifier is used to refine channel prediction.",
+      "Predictions below the confidence threshold are passed to the RAG pipeline instead of suggesting a channel."
     ]
   },
   {
-    "query": "What is the fallback plan if implementation time for the CLI runs short?",
-    "reference": "The BLT-MCP server is the priority; the CLI scope would be reduced to a Minimum Viable CLI featuring four core read-only commands: login, issues list, issue show, and search.",
+    "query": "Which classifier algorithms will be compared for the channel-routing model, and how will the best one be chosen?",
+    "reference": "Multinomial Logistic Regression, Linear SVM, and Multinomial Naive Bayes will be trained on TF-IDF vectors and compared using accuracy, F1 score, and precision/recall to select the best performer.",
     "contexts": [
-      "BLT-MCP is the primary deliverable. If the MCP migration takes longer than expected, MCP wins and CLI scope is reduced.",
-      "Minimum viable CLI (fallback): blt login — OAuth authentication.",
-      "Minimum viable CLI (fallback): blt issues list — list issues with filters.",
-      "Minimum viable CLI (fallback): blt issue show — display full issue details.",
-      "Minimum viable CLI (fallback): blt search — full-text search across issues."
+      "Classifiers considered include Multinomial Logistic Regression, Linear Support Vector Machine, and Multinomial Naive Bayes trained on TF-IDF vectors.",
+      "The evaluation uses metrics such as accuracy_score, F1 score, and precision/recall to determine which model performs best.",
+      "A/B testing across these classifiers helps select the most accurate one for the project's needs."
     ]
   },
   {
-    "query": "What specific success criteria are defined for verifying the MCP Tools?",
-    "reference": "Success requires each tool to pass an end-to-end test in CI that validates the response schema and confirms that requested side effects actually persist in the BLT system.",
+    "query": "What frameworks are combined to build the RAG pipeline in the Nest bot proposal, and how do they differ?",
+    "reference": "LangChain and LangGraph are combined; LangChain builds linear execution chains, while LangGraph, part of LangChain, allows defining graph-based workflows with conditional nodes and edges.",
     "contexts": [
-      "Each tool has an end-to-end test in CI that verifies the response matches the MCP tool result schema.",
-      "Tests must verify that side effects (e.g., issue created, status changed) actually persist in BLT."
+      "The RAG pipeline combines LangChain, a framework for linear execution chains, with LangGraph.",
+      "LangGraph allows defining graph workflows using conditional nodes and edges instead of simple linear chains."
     ]
   },
   {
-    "query": "How is feature parity ensured during the migration from TypeScript to Python?",
-    "reference": "Feature parity is tracked via a spreadsheet checklist mapping every TypeScript handler to its Python equivalent, verified by protocol compliance tests before the legacy code is removed.",
+    "query": "What monitoring and observability tool does the Nest bot proposal plan to self-host, and what metrics does it track?",
+    "reference": "Signoz, an open-source observability tool, is self-hosted via Docker and used to track pipeline latency, cache hit rate, and LLM response time.",
     "contexts": [
-      "A parity checklist (spreadsheet mapping each TS handler → Python equivalent → test status) is maintained.",
-      "The TypeScript code stays in the repo as reference until the Python version passes all tests and every checklist row is green.",
-      "The last TS commit is tagged (ts-final) before removal so it can be restored quickly if regressions occur."
+      "Signoz is an open-source tool used to get logs, metrics, and performance details of the RAG pipeline, self-hosted via a Dockerfile.",
+      "Tracked metrics include pipeline latency, cache hit rate, and LLM response time, used to tune thresholds and improve performance."
     ]
   },
   {
-  "query": "Does the proposal include plans for a native mobile application for iOS or Android?",
-  "reference": "The proposal does not mention a native mobile application; the scope is limited to a Python MCP server and a terminal-based CLI.",
-  "contexts": [
-    "BLT-MCP & BLT-CLI — AI Agent Interface + Developer CLI for the BLT Ecosystem... making BLT accessible from every interface: web, AI, and command line."
-  ]
-},
-  {
-    "query": "What GPU hardware is required to run the BLT-MCP server according to the technical specifications?",
-    "reference": "The proposal does not specify any GPU requirements; it lists an Intel Core i7 CPU and 16 GB of RAM for the development environment.",
+    "query": "What mechanism does the Nest bot proposal use to validate the LLM's generated answers before showing them to users?",
+    "reference": "The generated response is compared against the retrieved text_content; if it isn't relevant it's sent back to the LLM for refinement, and a carefully written prompt template also aims to reduce hallucinations or informal answers.",
     "contexts": [
-      "Development Platform Component Details: CPU Intel Core i7, RAM 16 GB, Storage 512 GB SSD."
+      "The response generated by the LLM is verified by comparing it with the retrieved text_content from the database.",
+      "If the answer is not relevant, it is sent back to the LLM for refinement based on the data source.",
+      "A proper prompt template helps ensure the validation layer avoids hallucinations or informal answers."
     ]
   },
   {
-    "query": "Which JavaScript framework is used for the development of the BLT-CLI tool?",
-    "reference": "The BLT-CLI tool is not built with a JavaScript framework; it is developed in Python using the click and rich libraries.",
+    "query": "What are the deliverables listed for the OWASP Nest bot AI assistant GSoC 2025 project?",
+    "reference": "The deliverables are a classifier model trained on OWASP data, a new AI-capable Nest bot, a tested production-ready mechanism for it, and usage documentation.",
     "contexts": [
-      "BLT-CLI — A developer-facing command-line tool... Built in Python with click (commands) + rich (colored tables, progress bars, ASCII animations)."
+      "Deliverables include developing a classifier model trained on OWASP's data.",
+      "A new Nest bot with AI assistance capabilities is a deliverable.",
+      "Testing and a production-ready mechanism for the Nest bot AI assistant, plus usage documentation, are also listed."
     ]
-  }
-]
+  },
+  {
+    "query": "How does the Nest bot proposal plan to keep improving the caching layer over time without it becoming bloated?",
+    "reference": "An automated weekly or bi-weekly job fetches and stores positively-rated cached responses, and responses are discarded once they accumulate enough negative feedback.",
+    "contexts": [
+      "A method fetches positive cached responses and stores them in the database, run via an automated job weekly or bi-weekly.",
+      "The count of positive and negative feedback is stored so cached responses can be discarded after enough negative feedback accumulates.",
+      "This keeps the caching layer from growing too large while still returning fast responses."
+    ]
+  }]

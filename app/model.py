@@ -108,42 +108,46 @@ class Message(Base):
 
 
 class Document(Base):
-     __tablename__="documents"
-     id: Mapped[uuid.UUID] = mapped_column(
+    __tablename__ = "documents"
+    id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-     )
-     title: Mapped[str] = mapped_column(String, nullable=False)
-     user_id: Mapped[uuid.UUID] = mapped_column(
+    )
+    title: Mapped[str] = mapped_column(String, nullable=False)
+    user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
     )
-     workspace_id:Mapped[uuid.UUID] = mapped_column(
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("workspace.id"), nullable=False
     )
-     source_type:Mapped[str] = mapped_column(String(255), nullable=False)
-     status: Mapped[DOCUMENTSTATUS] = mapped_column(
-    SAEnum(
-        DOCUMENTSTATUS,
-        name="document_status_enum",
-        native_enum=True,  # PostgreSQL enum type
-        validate_strings=True,
-    ),
-    default=DOCUMENTSTATUS.PENDING,  # Sets the default value
-    nullable=False,)
-     file_path : Mapped[str] = mapped_column(String(255), nullable=False)
-     parsed_markdown:Mapped[str] = mapped_column(Text, nullable=True)
-     created_at:Mapped[datetime] = mapped_column(
+    source_type: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[DOCUMENTSTATUS] = mapped_column(
+        SAEnum(
+            DOCUMENTSTATUS,
+            name="document_status_enum",
+            native_enum=True,
+            validate_strings=True,
+        ),
+        default=DOCUMENTSTATUS.PENDING,
+        nullable=False,
+    )
+    file_path: Mapped[str] = mapped_column(String(255), nullable=False)
+    parsed_markdown: Mapped[str] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
-        nullable=False
+        nullable=False,
     )
-     updated_at: Mapped[datetime] = mapped_column(
-    DateTime(timezone=True),
-    default=lambda: datetime.now(timezone.utc),
-    onupdate=lambda: datetime.now(timezone.utc),
-    nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+ 
+ 
 class DocumentParentChunk(Base):
     __tablename__ = "document_parent_chunk"
-
+ 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
@@ -155,15 +159,17 @@ class DocumentParentChunk(Base):
     token_count: Mapped[int] = mapped_column(Integer, nullable=True)
     page_start: Mapped[int] = mapped_column(Integer, nullable=True)
     page_end: Mapped[int] = mapped_column(Integer, nullable=True)
-
+ 
     __table_args__ = (
         UniqueConstraint("document_id", "parent_index", name="uq_document_parent_chunk"),
     )
+ 
+ 
 class DocumentChunk(Base):
     __tablename__ = "document_chunk"
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-     )
+    )
     document_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("documents.id"), nullable=False
     )
@@ -171,12 +177,25 @@ class DocumentChunk(Base):
         UUID(as_uuid=True), ForeignKey("document_parent_chunk.id"), nullable=True, index=True
     )
     chunk_index: Mapped[int] = mapped_column(nullable=False)
-    content: Mapped[Text] = mapped_column(Text, nullable=False)
+ 
+    # Display label for the student-facing UI, e.g. "4", "4.a", "2.b.i".
+    # Nullable because it's cosmetic — extraction can still succeed without a clean number.
+    question_number: Mapped[str | None] = mapped_column(String(20), nullable=True)
+ 
+    question: Mapped[str] = mapped_column(Text, nullable=True)
+    answer: Mapped[str | None] = mapped_column(Text, nullable=True)
+ 
+    # Set by the Stage 2/3 LLM extraction step. Drives the review queue below —
+    # without this you have no way to catch a bad question/answer pairing
+    # before a student sees it.
+    extraction_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    needs_review: Mapped[bool] = mapped_column(default=False, nullable=False)
+ 
     token_count: Mapped[int] = mapped_column(Integer, nullable=True)
     page_start: Mapped[int] = mapped_column(Integer, nullable=True)
     page_end: Mapped[int] = mapped_column(Integer, nullable=True)
     embedding: Mapped[list[float] | None] = mapped_column(Vector(384), nullable=True)
-
+ 
     __table_args__ = (
         UniqueConstraint("document_id", "chunk_index", name="uq_document_chunk"),
     )

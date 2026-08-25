@@ -76,29 +76,37 @@ async def build_eval_rows(
     default_document_ids: list[str] | None,
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
+    
+    print(f"-> Starting backend data retrieval for {len(testset)} test items...")
     async with httpx.AsyncClient() as client:
-        for item in testset:
+        # Loop sequentially to protect local FastAPI resource allocations
+        for idx, item in enumerate(testset):
             item_document_ids = item.get("document_ids") or default_document_ids
-            result = await fetch_answer(
-                client=client,
-                base_url=base_url,
-                workspace_id=workspace_id,
-                token=token,
-                query=item["query"],
-                limit=limit,
-                document_ids=item_document_ids,
-            )
-            # Use model-returned citation content as contexts for faithfulness checks.
-            contexts = [c["content"] for c in result.get("citations", [])]
-            rows.append(
-                {
-                    "user_input": item["query"],
-                    "response": result.get("answer", ""),
-                    "reference": item["reference"],
-                    "retrieved_contexts": contexts,
-                    "route": result.get("route", "unknown"),
-                }
-            )
+            try:
+                print(f"   [{idx + 1}/{len(testset)}] Fetching answer for: '{item['query'][:40]}...'")
+                result = await fetch_answer(
+                    client=client,
+                    base_url=base_url,
+                    workspace_id=workspace_id,
+                    token=token,
+                    query=item["query"],
+                    limit=limit,
+                    document_ids=item_document_ids,
+                )
+                # Use model-returned citation content as contexts for faithfulness checks.
+                contexts = [c["content"] for c in result.get("citations", [])]
+                rows.append(
+                    {
+                        "user_input": item["query"],
+                        "response": result.get("answer", ""),
+                        "reference": item["reference"],
+                        "retrieved_contexts": contexts,
+                        "route": result.get("route", "unknown"),
+                    }
+                )
+            except Exception as e:
+                print(f"⚠️ Error fetching item {idx + 1}: {e}")
+                
     return rows
 
 
@@ -108,11 +116,12 @@ def run_ragas(rows: list[dict[str, Any]], model_name: str) -> Any:
     llm = ChatOpenAI(model=model_name, temperature=0)
     ragas_llm = LangchainLLMWrapper(llm)
 
+    print("-> Data collection finished. Handing payload to OpenAI for RAGAS Scoring...")
     result = evaluate(
         dataset=dataset,
         metrics=[answer_relevancy, faithfulness, context_precision, context_recall],
         llm=ragas_llm,
-        run_config=RunConfig(timeout=120),
+        run_config=RunConfig(timeout=300, max_workers=2),
     )
     return result
 
@@ -148,6 +157,10 @@ def main() -> None:
             default_document_ids=default_document_ids,
         )
     )
+
+    if not rows:
+        print("❌ Error: No validation rows were successfully compiled. Aborting.")
+        return
 
     result = run_ragas(rows, model_name=args.model)
     print("=== RAGAS Results ===")

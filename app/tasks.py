@@ -8,6 +8,8 @@ from openai import OpenAI
 import os
 import re
 import uuid
+import logging
+import time
 from datetime import datetime, timezone
 from app.model import Document, DOCUMENTSTATUS, DocumentChunk, DocumentParentChunk
 
@@ -24,6 +26,7 @@ client = OpenAI(api_key=open_ai_key)
 EMBEDDING_MODEL = "text-embedding-3-small"
 EMBEDDING_DIMENSION = 384
 PIPELINE_VERSION = "v2.0"
+logger = logging.getLogger("app.tasks")
 
 
 def create_token_aware_parents(doc_elements, tokenizer, target_tokens: int = 1000) -> list[dict]:
@@ -86,6 +89,52 @@ def create_token_aware_parents(doc_elements, tokenizer, target_tokens: int = 100
     return parents
 
 
+def create_token_aware_parents_from_markdown(markdown_text: str, tokenizer, target_tokens: int = 1000) -> list[dict]:
+    """
+    Fallback parent builder when Docling layout nodes are unavailable or empty.
+    """
+    paragraphs = [p.strip() for p in markdown_text.split("\n\n") if p.strip()]
+    parents: list[dict] = []
+    current_parts: list[str] = []
+    current_tokens = 0
+    parent_index = 0
+
+    for para in paragraphs:
+        para_tokens = len(tokenizer.encode(para))
+
+        if current_parts and (current_tokens + para_tokens) > target_tokens:
+            combined = "\n\n".join(current_parts)
+            parents.append(
+                {
+                    "parent_index": parent_index,
+                    "content": combined,
+                    "token_count": current_tokens,
+                    "page_start": None,
+                    "page_end": None,
+                }
+            )
+            parent_index += 1
+            current_parts = []
+            current_tokens = 0
+
+        current_parts.append(para)
+        current_tokens += para_tokens
+
+    if current_parts:
+        combined = "\n\n".join(current_parts)
+        parents.append(
+            {
+                "parent_index": parent_index,
+                "content": combined,
+                "token_count": current_tokens,
+                "page_start": None,
+                "page_end": None,
+            }
+        )
+
+    return parents
+
+
 def split_parent_into_semantic_children(parent_text: str, tokenizer, target_tokens: int = 300, overlap_tokens: int = 50) -> list[str]:
     """
     Splits parent context blocks down into overlap-protected child text chunks.
@@ -138,36 +187,83 @@ def split_parent_into_semantic_children(parent_text: str, tokenizer, target_toke
 )
 def ingest_document(document_id: str):
     with SyncSession() as session:
+        started_at = time.perf_counter()
         doc_uuid = uuid.UUID(document_id)
+
+        logger.info("ingest_document.start document_id=%s", document_id)
 
         document = session.execute(
             select(Document).where(Document.id == doc_uuid)
         ).scalar_one_or_none()
 
         if document is None:
+            logger.warning("ingest_document.not_found document_id=%s", document_id)
             return {"status": "not_found", "document_id": document_id}
 
         try:
             document.status = DOCUMENTSTATUS.PROCESSING
             session.commit()
+            logger.info("ingest_document.status_processing document_id=%s", document_id)
             
             # 1. Enforce Idempotency by purging stale processing records first (Point 7)
-            session.execute(delete(DocumentChunk).where(DocumentChunk.document_id == doc_uuid))
-            session.execute(delete(DocumentParentChunk).where(DocumentParentChunk.document_id == doc_uuid))
+            deleted_child = session.execute(delete(DocumentChunk).where(DocumentChunk.document_id == doc_uuid))
+            deleted_parent = session.execute(delete(DocumentParentChunk).where(DocumentParentChunk.document_id == doc_uuid))
             session.commit()
+            logger.info(
+                "ingest_document.purge_complete document_id=%s deleted_children=%s deleted_parents=%s",
+                document_id,
+                deleted_child.rowcount,
+                deleted_parent.rowcount,
+            )
             
             # 2. Native Docling Conversion & Hierarchical Layout Extraction
             converter = DocumentConverter()
             conversion_result = converter.convert(document.file_path)
             docling_doc = conversion_result.document
             
-            document.parsed_markdown = docling_doc.export_to_markdown()
+            parsed_markdown = docling_doc.export_to_markdown() or ""
+            document.parsed_markdown = parsed_markdown
             session.commit()
+            logger.info(
+                "ingest_document.convert_complete document_id=%s markdown_chars=%s",
+                document_id,
+                len(parsed_markdown),
+            )
             
             tokenizer = tiktoken.get_encoding("cl100k_base")
             
             # 3. Create Token-Aware Parent Records using Docling layout elements (Point 4 & 10)
-            parent_payloads = create_token_aware_parents(docling_doc.elements, tokenizer)
+            doc_body = getattr(docling_doc, "body", None)
+            raw_children = getattr(doc_body, "children", None)
+            doc_elements = list(raw_children) if raw_children is not None else []
+            usable_text_elements = sum(
+                1 for el in doc_elements if str(getattr(el, "text", "") or "").strip()
+            )
+
+            logger.info(
+                "ingest_document.docling_structure document_id=%s has_body=%s child_count=%s usable_text_elements=%s",
+                document_id,
+                doc_body is not None,
+                len(doc_elements),
+                usable_text_elements,
+            )
+
+            parent_payloads = create_token_aware_parents(doc_elements, tokenizer) if doc_elements else []
+            if not parent_payloads:
+                logger.warning(
+                    "ingest_document.parent_fallback_markdown document_id=%s reason=no_parents_from_body_children",
+                    document_id,
+                )
+                parent_payloads = create_token_aware_parents_from_markdown(parsed_markdown, tokenizer)
+
+            if not parent_payloads:
+                raise RuntimeError("No parent chunks produced; failing ingestion")
+
+            logger.info(
+                "ingest_document.parents_built document_id=%s parent_count=%s",
+                document_id,
+                len(parent_payloads),
+            )
             
             parent_rows = []
             for p in parent_payloads:
@@ -198,20 +294,45 @@ def ingest_document(document_id: str):
                         "page_end": p_row.page_end
                     })
 
+            if not flat_children_pool:
+                raise RuntimeError("No child chunks produced; failing ingestion")
+
+            logger.info(
+                "ingest_document.children_built document_id=%s child_count=%s",
+                document_id,
+                len(flat_children_pool),
+            )
+
             # 5. Out-of-Loop Batched Embedding Processing (Points 6 & 9)
-            if flat_children_pool:
-                all_texts = [child["content"] for child in flat_children_pool]
-                
-                # Single OpenAI API execution call using modern batch input vectorization
-                embedding_response = client.embeddings.create(
-                    model=EMBEDDING_MODEL,
-                    input=all_texts,
-                    dimensions=EMBEDDING_DIMENSION
+            all_texts = [child["content"] for child in flat_children_pool]
+            
+            # Single OpenAI API execution call using modern batch input vectorization
+            embedding_response = client.embeddings.create(
+                model=EMBEDDING_MODEL,
+                input=all_texts,
+                dimensions=EMBEDDING_DIMENSION
+            )
+
+            if len(embedding_response.data) != len(flat_children_pool):
+                raise RuntimeError(
+                    f"Embedding response size mismatch: expected {len(flat_children_pool)}, got {len(embedding_response.data)}"
                 )
-                
-                # Assign generated float arrays back to structural chunk instances
-                for idx, data_item in enumerate(embedding_response.data):
-                    flat_children_pool[idx]["embedding"] = data_item.embedding
+            
+            # Assign generated float arrays back to structural chunk instances
+            for idx, data_item in enumerate(embedding_response.data):
+                flat_children_pool[idx]["embedding"] = data_item.embedding
+
+            missing_embeddings = sum(
+                1 for child in flat_children_pool if child.get("embedding") is None
+            )
+            if missing_embeddings:
+                raise RuntimeError(f"Missing embeddings for {missing_embeddings} child chunks")
+
+            logger.info(
+                "ingest_document.embeddings_generated document_id=%s embedding_count=%s",
+                document_id,
+                len(flat_children_pool),
+            )
 
             # 6. Database Commit Execution
             child_rows = []
@@ -232,9 +353,17 @@ def ingest_document(document_id: str):
             session.add_all(child_rows)
             document.status = DOCUMENTSTATUS.READY
             session.commit()
+            logger.info(
+                "ingest_document.success document_id=%s parent_count=%s child_count=%s elapsed_sec=%.2f",
+                document_id,
+                len(parent_rows),
+                len(child_rows),
+                time.perf_counter() - started_at,
+            )
             return {"status": "ready", "document_id": document_id}
 
         except Exception as e:
+            logger.exception("ingest_document.failed document_id=%s", document_id)
             session.rollback()
             document = session.execute(
                 select(Document).where(Document.id == doc_uuid)

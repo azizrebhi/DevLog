@@ -1,0 +1,66 @@
+import logging
+from uuid import UUID
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.model import DocumentParentChunk  # adjust import path to your project
+from splitter import split_document
+
+logger = logging.getLogger(__name__)
+
+
+def estimate_token_count(text: str) -> int:
+    # Rough heuristic (~4 chars/token for French/LaTeX mixed text).
+    return max(1, len(text) // 4)
+
+
+async def ingest_parent_chunks(
+    session: AsyncSession, document_id: UUID, markdown: str
+) -> list[dict]:
+    """
+    Runs Stage 1 splitting on a document's raw markdown and persists
+    each paired section as a DocumentParentChunk.
+
+    Returns a list of dicts: [{parent_chunk_id, title, correction_md}, ...]
+    so Stage 3 (LLM question/answer extraction) knows, for each parent,
+    which corrigé text to feed the model.
+    """
+    paired, unmatched_corrige = split_document(markdown)
+
+    if unmatched_corrige:
+        logger.warning(
+            "document_id=%s has %d unmatched corrigé sections: %s",
+            document_id,
+            len(unmatched_corrige),
+            [u["raw_title"] for u in unmatched_corrige],
+        )
+
+    results = []
+    for idx, section in enumerate(paired):
+        if section["confidence"].startswith("fuzzy"):
+            logger.info(
+                "document_id=%s parent[%d] '%s' matched via %s",
+                document_id, idx, section["title"], section["confidence"],
+            )
+        elif section["confidence"] != "high":
+            logger.info(
+                "document_id=%s parent[%d] '%s' -> %s",
+                document_id, idx, section["title"], section["confidence"],
+            )
+
+        parent = DocumentParentChunk(
+            document_id=document_id,
+            parent_index=idx,
+            content=section["question_md"],
+            token_count=estimate_token_count(section["question_md"]),
+        )
+        session.add(parent)
+        await session.flush()  # get parent.id without committing yet
+
+        results.append({
+            "parent_chunk_id": parent.id,
+            "title": section["title"],
+            "correction_md": section["correction_md"],  # None for preamble sections
+        })
+
+    return results
